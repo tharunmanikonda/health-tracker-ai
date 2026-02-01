@@ -1,0 +1,89 @@
+# Health Tracker - Docker Setup
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: health-tracker-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: health_tracker
+      POSTGRES_PASSWORD: health_tracker_secret
+      POSTGRES_DB: health_tracker
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U health_tracker -d health_tracker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - health-tracker-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: health-tracker-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://health_tracker:health_tracker_secret@postgres:5432/health_tracker
+      DATABASE_SSL: "false"
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      # WHOOP (optional)
+      WHOOP_CLIENT_ID: ${WHOOP_CLIENT_ID:-}
+      WHOOP_CLIENT_SECRET: ${WHOOP_CLIENT_SECRET:-}
+      WHOOP_REDIRECT_URI: ${WHOOP_REDIRECT_URI:-http://localhost:3001/api/whoop/callback}
+      # Fitbit (optional)
+      FITBIT_CLIENT_ID: ${FITBIT_CLIENT_ID:-}
+      FITBIT_CLIENT_SECRET: ${FITBIT_CLIENT_SECRET:-}
+      FITBIT_REDIRECT_URI: ${FITBIT_REDIRECT_URI:-http://localhost:3001/api/wearables/fitbit/callback}
+      # Google Fit (optional)
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:3001/api/wearables/google/callback}
+      # AI Coach (optional - uses pattern matching fallback if not set)
+      KIMI_API_KEY: ${KIMI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend/uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - health-tracker-network
+    command: sh -c "npm run db:migrate && npm start"
+
+  # Frontend (optional - for full stack)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: health-tracker-web
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      VITE_API_URL: http://localhost:3001
+    depends_on:
+      - backend
+    networks:
+      - health-tracker-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  health-tracker-network:
+    driver: bridge

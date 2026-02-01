@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "db:migrate": "node -e \"require('./database').init().then(() => { console.log('Database initialized'); process.exit(0); }).catch(err => { console.error(err); process.exit(1); })\""
   },
   "dependencies": {
     "axios": "^1.6.0",

@@ -4,10 +4,14 @@
 
 import {Platform} from 'react-native';
 
-// API Configuration
-export const API_BASE_URL = 'http://localhost:3001/api';
-export const WEBAPP_URL = __DEV__ 
-  ? 'http://localhost:3000' 
+// API Configuration - Use your local IP for device testing
+// Update this IP if your network changes
+const LOCAL_IP = '10.0.0.116';
+export const API_BASE_URL = __DEV__
+  ? `http://${LOCAL_IP}:3001/api`
+  : 'https://your-production-domain.com/api';
+export const WEBAPP_URL = __DEV__
+  ? `http://${LOCAL_IP}:3000`
   : 'https://your-production-domain.com';
 
 // Health data constants

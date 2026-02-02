@@ -2,6 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.tharunhealthtracker.fetch</string>
+		<string>com.transistorsoft.fetch</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
@@ -24,6 +29,26 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Tharun Health Tracker needs access to your health data to provide insights and sync with your dashboard. This includes steps, heart rate, sleep, workouts, and calories.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Tharun Health Tracker needs permission to read your health data for tracking and analysis.</string>
+	<key>NSPrivacyManifestFilePath</key>
+	<string>PrivacyInfo.xcprivacy</string>
+	<key>RCTDevMenu</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -46,42 +71,5 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
-	
-	<!-- HealthKit Permissions -->
-	<key>NSHealthShareUsageDescription</key>
-	<string>Tharun Health Tracker needs access to your health data to provide insights and sync with your dashboard. This includes steps, heart rate, sleep, workouts, and calories.</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>Tharun Health Tracker needs permission to read your health data for tracking and analysis.</string>
-	
-	<!-- Background fetch -->
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-		<string>com.tharunhealthtracker.fetch</string>
-		<string>com.transistorsoft.fetch</string>
-	</array>
-	
-	<!-- Required for background processing -->
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>fetch</string>
-		<string>processing</string>
-	</array>
-	
-	<!-- App Transport Security -->
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
-	
-	<!-- Privacy Manifest for App Store (iOS 17+) -->
-	<key>NSPrivacyManifestFilePath</key>
-	<string>PrivacyInfo.xcprivacy</string>
-	
-	<!-- Required for React Native Dev Menu -->
-	<key>RCTDevMenu</key>
-	<true/>
 </dict>
 </plist>

@@ -29,7 +29,6 @@
     "react-native": "0.73.0",
     "react-native-webview": "^13.6.3",
     "react-native-background-fetch": "^4.2.1",
-    "react-native-background-task": "^0.2.1",
     "react-native-sqlite-storage": "^6.0.1",
     "react-native-health": "^1.19.0",
     "react-native-health-connect": "^1.2.0",

@@ -33,3 +33,8 @@ Thumbs.db
 dist/
 build/
 *.exe
+
+# SSH keys (never commit these!)
+githubkey
+githubkey.pub
+*.pem

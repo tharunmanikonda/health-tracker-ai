@@ -8,8 +8,23 @@ import {databaseService} from './database';
 import {STORAGE_KEYS, API_BASE_URL} from '../utils/constants';
 import type {HealthMetric, HealthWorkout, SleepAnalysis} from '../types';
 
+type BackendMobileMetric = {
+  type: string;
+  value: number;
+  unit?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  metadata?: Record<string, any> | null;
+};
+
+type SyncRequestError = Error & {
+  retryAfterMs?: number;
+  retryable?: boolean;
+  status?: number;
+};
+
 class BackendSyncService {
-  private isSyncing: boolean = false;
+  private isSyncing = false;
 
   // Sync all unsynced data to backend
   async syncToBackend(): Promise<{
@@ -19,11 +34,11 @@ class BackendSyncService {
   }> {
     if (this.isSyncing) {
       console.log('[BackendSync] Already syncing, skipping');
-      return { metrics: 0, workouts: 0, sleep: 0 };
+      return {metrics: 0, workouts: 0, sleep: 0};
     }
 
     this.isSyncing = true;
-    const results = { metrics: 0, workouts: 0, sleep: 0 };
+    const results = {metrics: 0, workouts: 0, sleep: 0};
 
     try {
       const authToken = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
@@ -32,24 +47,21 @@ class BackendSyncService {
         return results;
       }
 
-      // Sync metrics
-      const unsyncedMetrics = await databaseService.getUnsyncedMetrics(100);
+      const unsyncedMetrics = await databaseService.getUnsyncedMetrics(200);
       if (unsyncedMetrics.length > 0) {
         const syncedIds = await this.uploadMetrics(unsyncedMetrics, authToken);
         await databaseService.markAsSynced('health_metrics', syncedIds);
         results.metrics = syncedIds.length;
       }
 
-      // Sync workouts
-      const unsyncedWorkouts = await databaseService.getUnsyncedWorkouts(50);
+      const unsyncedWorkouts = await databaseService.getUnsyncedWorkouts(100);
       if (unsyncedWorkouts.length > 0) {
         const syncedIds = await this.uploadWorkouts(unsyncedWorkouts, authToken);
         await databaseService.markAsSynced('health_workouts', syncedIds);
         results.workouts = syncedIds.length;
       }
 
-      // Sync sleep
-      const unsyncedSleep = await databaseService.getUnsyncedSleep(30);
+      const unsyncedSleep = await databaseService.getUnsyncedSleep(100);
       if (unsyncedSleep.length > 0) {
         const syncedIds = await this.uploadSleep(unsyncedSleep, authToken);
         await databaseService.markAsSynced('sleep_analysis', syncedIds);
@@ -66,144 +78,173 @@ class BackendSyncService {
     }
   }
 
-  // Upload metrics to backend
-  private async uploadMetrics(metrics: HealthMetric[], authToken: string): Promise<number[]> {
-    const syncedIds: number[] = [];
+  private mapSource(source: HealthMetric['source'] | HealthWorkout['source'] | SleepAnalysis['source']): string {
+    if (source === 'healthkit') return 'apple_healthkit';
+    if (source === 'healthconnect') return 'health_connect';
+    return source;
+  }
 
-    // Transform to backend format
-    const payload = metrics.map(m => ({
-      source: m.source,
-      type: m.type,
-      value: m.value,
-      unit: m.unit,
-      start_date: m.startDate,
-      end_date: m.endDate,
-      metadata: m.metadata,
-      timestamp: m.timestamp,
-    }));
+  private normalizeMetricType(type: string): string {
+    if (type === 'heart_rate_variability') return 'hrv';
+    return type;
+  }
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/health-metrics/batch`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({ metrics: payload }),
-      });
+  private chunk<T>(items: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < items.length; i += size) {
+      chunks.push(items.slice(i, i + size));
+    }
+    return chunks;
+  }
 
-      if (response.ok) {
-        // All metrics synced successfully
-        metrics.forEach(m => m.id && syncedIds.push(m.id));
-      } else if (response.status === 207) {
-        // Partial success - parse which ones succeeded
-        const result = await response.json();
-        if (result.synced_ids) {
-          // Backend returns IDs that were synced
-          metrics.forEach((m, index) => {
-            if (result.synced_ids.includes(index) && m.id) {
-              syncedIds.push(m.id);
-            }
-          });
+  private parseRetryAfterMs(value: string | null): number | null {
+    if (!value) return null;
+    const seconds = Number(value);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.round(seconds * 1000);
+    }
+
+    const at = Date.parse(value);
+    if (!Number.isFinite(at)) return null;
+    return Math.max(0, at - Date.now());
+  }
+
+  private getRetryDelayMs(attempt: number, retryAfterMs?: number): number {
+    if (Number.isFinite(retryAfterMs) && (retryAfterMs as number) > 0) {
+      return retryAfterMs as number;
+    }
+    const exponential = Math.min(30_000, 750 * 2 ** (attempt - 1));
+    const jitter = Math.floor(Math.random() * 500);
+    return exponential + jitter;
+  }
+
+  private async postMobileSync(source: string, metrics: BackendMobileMetric[], authToken: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/mobile/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({source, metrics}),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      const err = new Error(`Mobile sync failed (${response.status}): ${text}`) as SyncRequestError;
+      err.status = response.status;
+      err.retryAfterMs = this.parseRetryAfterMs(response.headers.get('retry-after')) ?? undefined;
+      err.retryable = response.status === 429 || response.status >= 500;
+      throw err;
+    }
+  }
+
+  private async uploadGroupedMetrics(
+    grouped: Record<string, BackendMobileMetric[]>,
+    authToken: string,
+  ): Promise<void> {
+    for (const [source, metrics] of Object.entries(grouped)) {
+      const batches = this.chunk(metrics, 100);
+      for (const batch of batches) {
+        let attempts = 0;
+        while (true) {
+          try {
+            await this.postMobileSync(source, batch, authToken);
+            break;
+          } catch (error) {
+            attempts += 1;
+            const requestError = error as SyncRequestError;
+            if (!requestError.retryable || attempts >= 4) throw error;
+            const delayMs = this.getRetryDelayMs(attempts, requestError.retryAfterMs);
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+          }
         }
-      } else {
-        throw new Error(`Upload failed: ${response.status}`);
       }
-    } catch (error) {
-      console.error('[BackendSync] Metrics upload error:', error);
-      throw error;
     }
-
-    return syncedIds;
   }
 
-  // Upload workouts to backend
+  private async uploadMetrics(metrics: HealthMetric[], authToken: string): Promise<number[]> {
+    const grouped: Record<string, BackendMobileMetric[]> = {};
+
+    for (const metric of metrics) {
+      if (!Number.isFinite(metric.value)) continue;
+      const source = this.mapSource(metric.source);
+      if (!grouped[source]) grouped[source] = [];
+
+      grouped[source].push({
+        type: this.normalizeMetricType(metric.type),
+        value: metric.value,
+        unit: metric.unit,
+        startTime: metric.startDate,
+        endTime: metric.endDate,
+        metadata: metric.metadata || null,
+      });
+    }
+
+    await this.uploadGroupedMetrics(grouped, authToken);
+    return metrics.filter((m) => !!m.id).map((m) => m.id!) as number[];
+  }
+
   private async uploadWorkouts(workouts: HealthWorkout[], authToken: string): Promise<number[]> {
-    const syncedIds: number[] = [];
+    const grouped: Record<string, BackendMobileMetric[]> = {};
 
-    const payload = workouts.map(w => ({
-      source: w.source,
-      workout_type: w.workoutType,
-      start_date: w.startDate,
-      end_date: w.endDate,
-      duration: w.duration,
-      calories: w.calories,
-      distance: w.distance,
-      heart_rate_avg: w.heartRateAvg,
-      heart_rate_max: w.heartRateMax,
-      heart_rate_min: w.heartRateMin,
-      metadata: w.metadata,
-      timestamp: w.timestamp,
-    }));
+    for (const workout of workouts) {
+      const source = this.mapSource(workout.source);
+      if (!grouped[source]) grouped[source] = [];
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/health-workouts/batch`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
+      grouped[source].push({
+        type: 'workout',
+        value: Math.round((workout.duration / 60) * 100) / 100,
+        unit: 'minutes',
+        startTime: workout.startDate,
+        endTime: workout.endDate,
+        metadata: {
+          workoutType: workout.workoutType,
+          calories: workout.calories,
+          distance: workout.distance,
+          heartRateAvg: workout.heartRateAvg,
+          heartRateMax: workout.heartRateMax,
+          heartRateMin: workout.heartRateMin,
+          ...(workout.metadata || {}),
         },
-        body: JSON.stringify({ workouts: payload }),
       });
-
-      if (response.ok) {
-        workouts.forEach(w => w.id && syncedIds.push(w.id));
-      } else {
-        throw new Error(`Workouts upload failed: ${response.status}`);
-      }
-    } catch (error) {
-      console.error('[BackendSync] Workouts upload error:', error);
-      throw error;
     }
 
-    return syncedIds;
+    await this.uploadGroupedMetrics(grouped, authToken);
+    return workouts.filter((w) => !!w.id).map((w) => w.id!) as number[];
   }
 
-  // Upload sleep data to backend
   private async uploadSleep(sleepData: SleepAnalysis[], authToken: string): Promise<number[]> {
-    const syncedIds: number[] = [];
+    const grouped: Record<string, BackendMobileMetric[]> = {};
 
-    const payload = sleepData.map(s => ({
-      source: s.source,
-      start_date: s.startDate,
-      end_date: s.endDate,
-      duration: s.duration,
-      deep_sleep: s.deepSleep,
-      rem_sleep: s.remSleep,
-      light_sleep: s.lightSleep,
-      awake: s.awake,
-      efficiency: s.efficiency,
-      metadata: s.metadata,
-      timestamp: s.timestamp,
-    }));
+    for (const sleep of sleepData) {
+      const source = this.mapSource(sleep.source);
+      if (!grouped[source]) grouped[source] = [];
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/health-sleep/batch`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
+      grouped[source].push({
+        type: 'sleep',
+        value: Math.round((sleep.duration / 60) * 100) / 100,
+        unit: 'minutes',
+        startTime: sleep.startDate,
+        endTime: sleep.endDate,
+        metadata: {
+          deepSleep: sleep.deepSleep,
+          remSleep: sleep.remSleep,
+          lightSleep: sleep.lightSleep,
+          awake: sleep.awake,
+          efficiency: sleep.efficiency,
+          ...(sleep.metadata || {}),
         },
-        body: JSON.stringify({ sleep: payload }),
       });
-
-      if (response.ok) {
-        sleepData.forEach(s => s.id && syncedIds.push(s.id));
-      } else {
-        throw new Error(`Sleep upload failed: ${response.status}`);
-      }
-    } catch (error) {
-      console.error('[BackendSync] Sleep upload error:', error);
-      throw error;
     }
 
-    return syncedIds;
+    await this.uploadGroupedMetrics(grouped, authToken);
+    return sleepData.filter((s) => !!s.id).map((s) => s.id!) as number[];
   }
 
   // Get sync status
   async getSyncStatus(): Promise<{
     isSyncing: boolean;
-    pending: { metrics: number; workouts: number; sleep: number };
+    pending: {metrics: number; workouts: number; sleep: number};
   }> {
     const pending = await databaseService.getPendingCount();
     return {

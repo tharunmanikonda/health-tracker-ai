@@ -12,6 +12,7 @@ import {
   Alert,
   StatusBar,
   Platform,
+  useColorScheme,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {WebAppContainer} from './components/WebAppContainer';
@@ -32,6 +33,9 @@ if (Platform.OS === 'android') {
 }
 
 const App: React.FC = () => {
+  const isDarkMode = useColorScheme() === 'dark';
+  const appBackground = isDarkMode ? '#0B1121' : '#FFFFFF';
+  const statusBarStyle = isDarkMode ? 'light-content' : 'dark-content';
   const [isInitialized, setIsInitialized] = useState(false);
   const [hasPermissions, setHasPermissions] = useState(false);
   const [showPermissionPrompt, setShowPermissionPrompt] = useState(false);
@@ -242,18 +246,15 @@ const App: React.FC = () => {
 
   if (!isInitialized) {
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" />
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading...</Text>
-        </View>
+      <View style={[styles.container, {backgroundColor: appBackground}]}>
+        <StatusBar barStyle={statusBarStyle} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <View style={[styles.container, {backgroundColor: appBackground}]}>
+      <StatusBar barStyle={statusBarStyle} />
 
       {/* Main WebView - full screen edge-to-edge */}
       <View style={styles.webviewContainer}>
@@ -295,16 +296,6 @@ const styles = StyleSheet.create({
   scannerOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 100,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0B1121',
-  },
-  loadingText: {
-    fontSize: 18,
-    color: '#94A3B8',
   },
   statusBar: {
     flexDirection: 'row',

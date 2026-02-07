@@ -8,10 +8,10 @@ import React, {useRef, useState, useCallback, useEffect} from 'react';
 import {
   View,
   StyleSheet,
-  ActivityIndicator,
   Text,
   RefreshControl,
   ScrollView,
+  useColorScheme,
 } from 'react-native';
 import {WebView} from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -59,7 +59,7 @@ const INJECTED_JAVASCRIPT = `
     var style = document.createElement('style');
     style.textContent = [
       // Prevent overscroll white flash
-      'html, body { overscroll-behavior: none; -webkit-overflow-scrolling: touch; background-color: #0B1121 !important; }',
+      'html, body { overscroll-behavior: none; -webkit-overflow-scrolling: touch; }',
       // Profile avatar is now the only header action, keep it visible
       // Disable text selection to feel native
       '* { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }',
@@ -146,6 +146,9 @@ const INJECTED_JAVASCRIPT = `
 `;
 
 export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage, onScanRequested, navigateTo}) => {
+  const isDarkMode = useColorScheme() === 'dark';
+  const appBackground = isDarkMode ? '#0B1121' : '#FFFFFF';
+  const errorSubtextColor = isDarkMode ? '#94A3B8' : '#666666';
   const webViewRef = useRef<WebView>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -320,7 +323,7 @@ export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage, onSc
   }, [navigateTo, loading]);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, {backgroundColor: appBackground}]}>
       {error ? (
         <ScrollView
           contentContainerStyle={styles.errorContainer}
@@ -329,7 +332,7 @@ export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage, onSc
           }
         >
           <Text style={styles.errorText}>Failed to load app</Text>
-          <Text style={styles.errorSubtext}>{error}</Text>
+          <Text style={[styles.errorSubtext, {color: errorSubtextColor}]}>{error}</Text>
           <Text style={styles.retryText}>Pull down to retry</Text>
         </ScrollView>
       ) : (
@@ -344,7 +347,8 @@ export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage, onSc
           onError={handleError}
           javaScriptEnabled={true}
           domStorageEnabled={true}
-          startInLoadingState={true}
+          startInLoadingState={false}
+          pullToRefreshEnabled={true}
           allowsBackForwardNavigationGestures={true}
           mixedContentMode="always"
           cacheEnabled={true}
@@ -352,8 +356,8 @@ export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage, onSc
           bounces={false}
           overScrollMode="never"
           scrollEnabled={true}
-          // Match the app's dark background so no white flash
-          backgroundColor="#0B1121"
+          // Match native wrapper background to avoid launch flashes
+          backgroundColor={appBackground}
           // Handle file uploads
           allowsFileAccess={true}
           allowsFileAccessFromFileURLs={true}
@@ -363,16 +367,6 @@ export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage, onSc
           mediaPlaybackRequiresUserAction={false}
           mediaCapturePermissionGrantType="grant"
         />
-      )}
-      {loading && (
-        <View style={styles.loadingContainer}>
-          <View style={styles.loadingLogo}>
-            <Text style={styles.loadingLogoText}>♥</Text>
-          </View>
-          <Text style={styles.loadingTitle}>HealthSync</Text>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.loadingText}>Syncing your wellness dashboard...</Text>
-        </View>
       )}
     </View>
   );
@@ -386,38 +380,6 @@ const styles = StyleSheet.create({
   webview: {
     flex: 1,
     backgroundColor: '#0B1121',
-  },
-  loadingContainer: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0B1121',
-  },
-  loadingLogo: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
-    backgroundColor: '#007AFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingLogoText: {
-    color: '#f8fafc',
-    fontSize: 34,
-    fontWeight: '700',
-    lineHeight: 36,
-  },
-  loadingTitle: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#007AFF',
-    letterSpacing: 0.3,
-    marginBottom: 4,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#94A3B8',
-    marginTop: 4,
   },
   errorContainer: {
     flex: 1,

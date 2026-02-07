@@ -58,13 +58,26 @@ router.get('/today', async (req, res) => {
       [userId]
     );
     
-    // Calculate macros
+    // Calculate macros (food intake)
     const totals = foodLogs.reduce((acc, log) => ({
       calories: acc.calories + (log.calories || 0),
       protein: acc.protein + (log.protein || 0),
       carbs: acc.carbs + (log.carbs || 0),
       fat: acc.fat + (log.fat || 0)
     }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
+
+    // Calculate calories burned from activity sources
+    let caloriesBurned = 0;
+    let burnedSource = null;
+    if (whoopMetrics?.kilojoules) {
+      // WHOOP reports in kilojoules, convert to kcal
+      caloriesBurned = Math.round(whoopMetrics.kilojoules * 0.239006);
+      burnedSource = 'whoop';
+    } else {
+      // Sum calories from today's workouts as fallback
+      caloriesBurned = workouts.reduce((sum, w) => sum + (w.calories || 0), 0);
+      if (caloriesBurned > 0) burnedSource = 'workouts';
+    }
 
     res.json({
       date: today,
@@ -75,6 +88,8 @@ router.get('/today', async (req, res) => {
       summary: summary,
       goals: goals,
       totals: totals,
+      calories_burned: caloriesBurned,
+      burned_source: burnedSource,
       water: { total: waterData?.total || 0 },
       remaining: {
         calories: goals.daily_calorie_goal - totals.calories,

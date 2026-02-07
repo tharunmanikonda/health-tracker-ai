@@ -9,7 +9,7 @@ const db = require('../database');
 // POST /api/mobile/health/sync - Receive health data from mobile app
 router.post('/sync', async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = (req.user.userId || req.user.id);
     const { source, metrics } = req.body;
     
     // Validate source
@@ -89,7 +89,7 @@ router.post('/sync', async (req, res) => {
 // GET /api/mobile/health/latest - Get latest health metrics
 router.get('/latest', async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = (req.user.userId || req.user.id);
     const { since, types } = req.query;
     
     let query = `
@@ -131,7 +131,7 @@ router.get('/latest', async (req, res) => {
 // GET /api/mobile/health/summary - Get today's summary
 router.get('/summary', async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = (req.user.userId || req.user.id);
     const today = new Date().toISOString().split('T')[0];
     
     const summary = await db.get(`
@@ -183,7 +183,7 @@ router.get('/summary', async (req, res) => {
 // GET /api/mobile/health/ai-feed - Get unprocessed data for AI
 router.get('/ai-feed', async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = (req.user.userId || req.user.id);
     const { limit = 50, markProcessed = true } = req.query;
     
     // Get unprocessed items
@@ -223,7 +223,7 @@ router.get('/ai-feed', async (req, res) => {
 // GET /api/mobile/health/ai-feed/stats - Get feed statistics
 router.get('/ai-feed/stats', async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = (req.user.userId || req.user.id);
     
     const stats = await db.get(`
       SELECT 
@@ -262,7 +262,7 @@ router.get('/ai-feed/stats', async (req, res) => {
 // POST /api/mobile/health/webhook/subscribe - Subscribe to webhooks
 router.post('/webhook/subscribe', async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = (req.user.userId || req.user.id);
     const { url, events } = req.body;
     
     // Store webhook subscription (for future implementation)
@@ -283,7 +283,7 @@ router.post('/webhook/subscribe', async (req, res) => {
 // GET /api/mobile/health/webhook/events - Get recent webhook events
 router.get('/webhook/events', async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = (req.user.userId || req.user.id);
     const { limit = 20 } = req.query;
     
     const events = await db.all(`

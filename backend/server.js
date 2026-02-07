@@ -17,9 +17,13 @@ const aiCoachRoutes = require('./routes/aiCoach');
 const ouraRoutes = require('./routes/oura');
 const garminRoutes = require('./routes/garmin');
 const whoopService = require('./services/whoop');
+const fitbitService = require('./services/fitbit');
+const fitbitWebhookRoutes = require('./routes/fitbitWebhook');
+const teamsRoutes = require('./routes/teams');
+const challengeProgress = require('./services/challengeProgress');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 8000;
 
 app.use(cors());
 app.use(bodyParser.json({
@@ -37,6 +41,9 @@ app.use('/api/auth', authRouter);
 app.use('/api/oura', ouraRoutes);
 app.use('/api/garmin', garminRoutes);
 
+// Fitbit webhook endpoint (public - Fitbit calls this directly, security via signature verification)
+app.use('/api/webhook/fitbit', fitbitWebhookRoutes);
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -53,6 +60,7 @@ app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/mobile', mobileRoutes);
 app.use('/api/wearables', wearablesRoutes);
 app.use('/api/ai-coach', aiCoachRoutes);
+app.use('/api/teams', teamsRoutes);
 
 // Tracking routes - mounted at root /api for frontend compatibility
 app.use('/api/water', authenticateToken, (req, res, next) => {
@@ -101,7 +109,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Serve frontend static files
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
-// Auto-sync WHOOP data every 15 minutes (protected - only for authenticated users)
+// Auto-sync WHOOP data every 15 minutes
 cron.schedule('*/15 * * * *', async () => {
   console.log('[CRON] Syncing WHOOP data...');
   try {
@@ -109,6 +117,28 @@ cron.schedule('*/15 * * * *', async () => {
     console.log('[CRON] WHOOP sync complete');
   } catch (err) {
     console.error('[CRON] WHOOP sync failed:', err.message);
+  }
+});
+
+// Auto-sync Fitbit data every 15 minutes (for HR, HRV, AZM that don't support webhooks)
+cron.schedule('*/15 * * * *', async () => {
+  console.log('[CRON] Syncing Fitbit data...');
+  try {
+    await fitbitService.syncAllUsers();
+    console.log('[CRON] Fitbit sync complete');
+  } catch (err) {
+    console.error('[CRON] Fitbit sync failed:', err.message);
+  }
+});
+
+// Update challenge progress every 15 minutes
+cron.schedule('*/15 * * * *', async () => {
+  console.log('[CRON] Updating challenge progress...');
+  try {
+    await challengeProgress.updateAllChallengeProgress();
+    console.log('[CRON] Challenge progress update complete');
+  } catch (err) {
+    console.error('[CRON] Challenge progress update failed:', err.message);
   }
 });
 

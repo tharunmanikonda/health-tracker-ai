@@ -23,6 +23,8 @@ import type {WebViewMessage, WebViewHealthDataMessage} from '../types';
 
 interface WebAppContainerProps {
   onMessage?: (message: any) => void;
+  onScanRequested?: () => void;
+  navigateTo?: string | null;
 }
 
 const INJECTED_JAVASCRIPT = `
@@ -47,44 +49,115 @@ const INJECTED_JAVASCRIPT = `
       }
     };
 
+    // Set viewport-fit=cover so env(safe-area-inset-*) works
+    var viewport = document.querySelector('meta[name="viewport"]');
+    if (viewport) {
+      viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, viewport-fit=cover');
+    }
+
+    // Inject styles to make WebView feel like a native app
+    var style = document.createElement('style');
+    style.textContent = [
+      // Prevent overscroll white flash
+      'html, body { overscroll-behavior: none; -webkit-overflow-scrolling: touch; background-color: #0B1121 !important; }',
+      // Profile avatar is now the only header action, keep it visible
+      // Disable text selection to feel native
+      '* { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }',
+      'input, textarea { -webkit-user-select: auto; user-select: auto; }',
+    ].join('\\n');
+    document.head.appendChild(style);
+
     // Notify that the bridge is ready
     window.ReactNativeWebViewBridge.postMessage({
       type: 'bridge_ready',
       payload: { timestamp: new Date().toISOString() }
     });
 
-    // Listen for auth token updates
-    const originalFetch = window.fetch;
-    window.fetch = async function(...args) {
-      const response = await originalFetch.apply(this, args);
-      // Check if auth token is in response
-      const authHeader = response.headers.get('Authorization');
-      if (authHeader && authHeader.startsWith('Bearer ')) {
+    // Intercept /scan navigation to use native scanner
+    const checkForScanRoute = function() {
+      if (window.location.pathname === '/scan') {
+        window.ReactNativeWebViewBridge.postMessage({
+          type: 'navigate_scan',
+          payload: { url: window.location.href }
+        });
+        // Navigate back so the scan page doesn't render in WebView
+        if (window.history.length > 1) {
+          window.history.back();
+        }
+      }
+    };
+
+    // Monitor pushState (React Router uses this)
+    var originalPushState = history.pushState;
+    history.pushState = function() {
+      originalPushState.apply(this, arguments);
+      checkForScanRoute();
+    };
+
+    // Monitor replaceState
+    var originalReplaceState = history.replaceState;
+    history.replaceState = function() {
+      originalReplaceState.apply(this, arguments);
+      checkForScanRoute();
+    };
+
+    // Monitor popstate (back/forward)
+    window.addEventListener('popstate', checkForScanRoute);
+
+    // Sync auth token from localStorage to React Native
+    // Web app stores JWT as localStorage.getItem('token')
+    function syncAuthToken() {
+      var token = localStorage.getItem('token');
+      if (token) {
         window.ReactNativeWebViewBridge.postMessage({
           type: 'auth_token',
-          payload: { token: authHeader.replace('Bearer ', '') }
+          payload: { token: token }
         });
       }
-      return response;
+    }
+
+    // Sync token immediately
+    syncAuthToken();
+
+    // Also sync whenever localStorage changes (login/logout)
+    var originalSetItem = localStorage.setItem;
+    localStorage.setItem = function(key, value) {
+      originalSetItem.apply(this, arguments);
+      if (key === 'token') {
+        window.ReactNativeWebViewBridge.postMessage({
+          type: 'auth_token',
+          payload: { token: value }
+        });
+      }
+    };
+
+    var originalRemoveItem = localStorage.removeItem;
+    localStorage.removeItem = function(key) {
+      originalRemoveItem.apply(this, arguments);
+      if (key === 'token') {
+        window.ReactNativeWebViewBridge.postMessage({
+          type: 'auth_token',
+          payload: { token: null }
+        });
+      }
     };
   })();
   true;
 `;
 
-export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage}) => {
+export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage, onScanRequested, navigateTo}) => {
   const webViewRef = useRef<WebView>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Inject auth token when WebView loads
+  // Inject auth token when WebView loads (sync from AsyncStorage → localStorage)
   const injectAuthToken = useCallback(async () => {
     const token = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
     if (token && webViewRef.current) {
       const script = `
         (function() {
-          localStorage.setItem('auth_token', '${token}');
-          window.dispatchEvent(new StorageEvent('storage', { key: 'auth_token' }));
+          localStorage.setItem('token', '${token}');
         })();
         true;
       `;
@@ -106,6 +179,10 @@ export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage}) => 
         case 'auth_token':
           if (message.payload?.token) {
             await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, message.payload.token);
+            console.log('[WebView] Auth token synced to AsyncStorage');
+          } else {
+            await AsyncStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+            console.log('[WebView] Auth token removed from AsyncStorage');
           }
           break;
 
@@ -131,6 +208,13 @@ export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage}) => 
             type: 'sync_status',
             payload: status,
           });
+          break;
+
+        case 'navigate_scan':
+          console.log('[WebView] Scan requested - opening native scanner');
+          if (onScanRequested) {
+            onScanRequested();
+          }
           break;
 
         case 'console':
@@ -211,6 +295,30 @@ export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage}) => 
     }
   }, [loading, sendHealthDataToWebView]);
 
+  // Navigate WebView via SPA click (no page reload, no blink)
+  useEffect(() => {
+    if (navigateTo && webViewRef.current && !loading) {
+      const route = navigateTo.split('?')[0];
+      // Click the nav link for SPA navigation, then dispatch refresh event
+      const script = `
+        (function() {
+          // Try exact match first, then partial match on nav links
+          var link = document.querySelector('a[href="${route}"]') ||
+                     document.querySelector('nav a[href="${route}"]');
+          if (link) {
+            link.click();
+          }
+          // Tell the web app to refresh its data (e.g. after native food logging)
+          setTimeout(function() {
+            window.dispatchEvent(new Event('native-data-changed'));
+          }, 300);
+        })();
+        true;
+      `;
+      webViewRef.current.injectJavaScript(script);
+    }
+  }, [navigateTo, loading]);
+
   return (
     <View style={styles.container}>
       {error ? (
@@ -237,20 +345,33 @@ export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage}) => 
           javaScriptEnabled={true}
           domStorageEnabled={true}
           startInLoadingState={true}
-          pullToRefreshEnabled={true}
           allowsBackForwardNavigationGestures={true}
           mixedContentMode="always"
           cacheEnabled={true}
+          // Prevent white overscroll - makes it feel like a native app
+          bounces={false}
+          overScrollMode="never"
+          scrollEnabled={true}
+          // Match the app's dark background so no white flash
+          backgroundColor="#0B1121"
           // Handle file uploads
           allowsFileAccess={true}
           allowsFileAccessFromFileURLs={true}
           allowsUniversalAccessFromFileURLs={true}
+          // Camera access
+          allowsInlineMediaPlayback={true}
+          mediaPlaybackRequiresUserAction={false}
+          mediaCapturePermissionGrantType="grant"
         />
       )}
       {loading && (
         <View style={styles.loadingContainer}>
+          <View style={styles.loadingLogo}>
+            <Text style={styles.loadingLogoText}>♥</Text>
+          </View>
+          <Text style={styles.loadingTitle}>HealthSync</Text>
           <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.loadingText}>Syncing your dashboard...</Text>
+          <Text style={styles.loadingText}>Syncing your wellness dashboard...</Text>
         </View>
       )}
     </View>
@@ -260,21 +381,43 @@ export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage}) => 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#0B1121',
   },
   webview: {
     flex: 1,
+    backgroundColor: '#0B1121',
   },
   loadingContainer: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#0B1121',
+  },
+  loadingLogo: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    backgroundColor: '#007AFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingLogoText: {
+    color: '#f8fafc',
+    fontSize: 34,
+    fontWeight: '700',
+    lineHeight: 36,
+  },
+  loadingTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#007AFF',
+    letterSpacing: 0.3,
+    marginBottom: 4,
   },
   loadingText: {
     fontSize: 16,
-    color: '#666',
-    marginTop: 12,
+    color: '#94A3B8',
+    marginTop: 4,
   },
   errorContainer: {
     flex: 1,

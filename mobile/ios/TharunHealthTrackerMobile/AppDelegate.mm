@@ -42,7 +42,7 @@
 // Required for HealthKit background delivery
 - (void)applicationDidBecomeActive:(UIApplication *)application
 {
-  [super applicationDidBecomeActive:application];
+  // HealthKit background delivery handling if needed
 }
 
 // Handle deep linking

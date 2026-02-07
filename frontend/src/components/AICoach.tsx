@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Send, 
-  Bot, 
-  User, 
-  Sparkles, 
-  Trash2, 
-  ChevronDown, 
+import {
+  Send,
+  Bot,
+  User,
+  Sparkles,
+  Trash2,
+  ChevronDown,
   Lightbulb,
   TrendingUp,
   Heart,
@@ -15,9 +15,7 @@ import {
   Utensils,
   Activity
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { cn } from '@/lib/utils';
+const cn = (...classes: (string | undefined | false)[]) => classes.filter(Boolean).join(' ');
 
 interface Message {
   id: number;
@@ -40,7 +38,7 @@ export function AICoach() {
     {
       id: 0,
       role: 'assistant',
-      content: "👋 Hi! I'm your AI Health Coach. I can see your data from WHOOP, Fitbit, and your food logs. Ask me anything about your health, nutrition, or recovery!",
+      content: "Hi! I'm your AI Health Coach. I can see your data from WHOOP, Fitbit, and your food logs. Ask me anything about your health, nutrition, or recovery!",
       timestamp: new Date().toISOString(),
       suggestions: ["How am I doing today?", "What's my recovery like?", "How can I improve my sleep?"]
     }
@@ -138,7 +136,7 @@ export function AICoach() {
 
   const clearHistory = async () => {
     if (!confirm('Clear all chat history?')) return;
-    
+
     try {
       await fetch('/api/ai-coach/history', { method: 'DELETE' });
       setMessages([{
@@ -154,72 +152,85 @@ export function AICoach() {
 
   const getInsightIcon = (type: string) => {
     switch (type) {
-      case 'recovery': return <Heart className="w-4 h-4" />;
-      case 'sleep': return <Moon className="w-4 h-4" />;
-      case 'nutrition': return <Utensils className="w-4 h-4" />;
-      case 'activity': return <Activity className="w-4 h-4" />;
-      case 'hydration': return <Droplets className="w-4 h-4" />;
-      default: return <Sparkles className="w-4 h-4" />;
+      case 'recovery': return <Heart style={{width: 16, height: 16}} />;
+      case 'sleep': return <Moon style={{width: 16, height: 16}} />;
+      case 'nutrition': return <Utensils style={{width: 16, height: 16}} />;
+      case 'activity': return <Activity style={{width: 16, height: 16}} />;
+      case 'hydration': return <Droplets style={{width: 16, height: 16}} />;
+      default: return <Sparkles style={{width: 16, height: 16}} />;
     }
   };
 
-  const getPriorityColor = (priority: string) => {
+  const getPriorityStyle = (priority: string) => {
     switch (priority) {
-      case 'high': return 'border-red-500/50 bg-red-500/10';
-      case 'medium': return 'border-yellow-500/50 bg-yellow-500/10';
-      case 'low': return 'border-green-500/50 bg-green-500/10';
-      default: return 'border-gray-500/50 bg-gray-500/10';
+      case 'high': return { borderColor: 'rgba(239, 68, 68, 0.4)', background: 'rgba(239, 68, 68, 0.1)' };
+      case 'medium': return { borderColor: 'rgba(245, 158, 11, 0.4)', background: 'rgba(245, 158, 11, 0.1)' };
+      case 'low': return { borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.1)' };
+      default: return { borderColor: 'var(--glass-border)', background: 'var(--glass-bg)' };
     }
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] max-w-3xl mx-auto">
+    <div style={{display: 'flex', flexDirection: 'column', height: 'calc(100vh - 140px)', maxWidth: '768px', margin: '0 auto'}}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border/50">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-            <Bot className="w-5 h-5 text-white" />
+      <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', borderBottom: '1px solid var(--glass-border)'}}>
+        <div style={{display: 'flex', alignItems: 'center', gap: '0.75rem'}}>
+          <div style={{
+            width: 40, height: 40, borderRadius: '50%',
+            background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <Bot style={{width: 20, height: 20, color: 'white'}} />
           </div>
           <div>
-            <h2 className="font-semibold text-lg">AI Health Coach</h2>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Online • Knows your WHOOP, Fitbit & nutrition data
+            <h2 style={{fontSize: '1.125rem', fontWeight: 600}}>AI Health Coach</h2>
+            <p style={{fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem'}}>
+              <span style={{width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block', animation: 'glowPulse 2s infinite'}} />
+              Online
             </p>
           </div>
         </div>
-        <Button variant="ghost" size="sm" onClick={clearHistory} className="text-muted-foreground">
-          <Trash2 className="w-4 h-4 mr-1" />
+        <button onClick={clearHistory} style={{
+          display: 'flex', alignItems: 'center', gap: '0.25rem',
+          padding: '0.25rem 0.5rem', fontSize: '0.875rem',
+          color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer',
+          borderRadius: 'var(--radius-sm)'
+        }}>
+          <Trash2 style={{width: 16, height: 16}} />
           Clear
-        </Button>
+        </button>
       </div>
 
       {/* Insights Panel */}
       {showInsights && insights.length > 0 && (
-        <div className="p-3 bg-card/50 border-b border-border/50">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Lightbulb className="w-4 h-4 text-yellow-500" />
+        <div style={{padding: '0.75rem', background: 'var(--glass-bg)', backdropFilter: 'blur(10px)', borderBottom: '1px solid var(--glass-border)'}}>
+          <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem'}}>
+            <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 500, fontFamily: 'var(--font-heading)'}}>
+              <Lightbulb style={{width: 16, height: 16, color: '#f59e0b'}} />
               Today's Insights
             </div>
-            <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => setShowInsights(false)}>
-              <ChevronDown className="w-4 h-4" />
-            </Button>
+            <button style={{height: 24, padding: '0 0.5rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer'}} onClick={() => setShowInsights(false)}>
+              <ChevronDown style={{width: 16, height: 16}} />
+            </button>
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          <div style={{display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.25rem'}}>
             {insights.slice(0, 3).map((insight, idx) => (
               <button
                 key={idx}
                 onClick={() => sendMessage(`Tell me more about: ${insight.title}`)}
-                className={cn(
-                  "flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg border text-left transition-all hover:scale-[1.02]",
-                  getPriorityColor(insight.priority)
-                )}
+                style={{
+                  flexShrink: 0, display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  padding: '0.5rem 0.75rem', borderRadius: 'var(--radius)',
+                  border: '1px solid', textAlign: 'left',
+                  cursor: 'pointer', transition: 'all 150ms ease',
+                  backdropFilter: 'blur(10px)',
+                  ...getPriorityStyle(insight.priority)
+                }}
               >
                 {getInsightIcon(insight.type)}
                 <div>
-                  <div className="text-xs font-medium">{insight.title}</div>
-                  <div className="text-[10px] opacity-70 truncate max-w-[150px]">{insight.message}</div>
+                  <div style={{fontSize: '0.75rem', fontWeight: 500}}>{insight.title}</div>
+                  <div style={{fontSize: '0.625rem', opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150}}>{insight.message}</div>
                 </div>
               </button>
             ))}
@@ -228,50 +239,68 @@ export function AICoach() {
       )}
 
       {/* Chat Messages */}
-      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
-        <div className="space-y-4">
-          {messages.map((msg, idx) => (
+      <div style={{flex: 1, padding: '1rem', overflowY: 'auto'}} ref={scrollRef}>
+        <div style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
+          {messages.map((msg) => (
             <div
               key={msg.id}
-              className={cn(
-                "flex gap-3",
-                msg.role === 'user' ? "flex-row-reverse" : "flex-row"
-              )}
+              style={{
+                display: 'flex', gap: '0.75rem',
+                flexDirection: msg.role === 'user' ? 'row-reverse' : 'row'
+              }}
             >
               {/* Avatar */}
-              <div className={cn(
-                "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
-                msg.role === 'user' ? "bg-primary" : "bg-gradient-to-br from-emerald-500 to-teal-600"
-              )}>
+              <div style={{
+                width: 32, height: 32, borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                background: msg.role === 'user'
+                  ? 'linear-gradient(135deg, var(--primary), var(--secondary))'
+                  : 'linear-gradient(135deg, var(--primary), var(--secondary))'
+              }}>
                 {msg.role === 'user' ? (
-                  <User className="w-4 h-4 text-primary-foreground" />
+                  <User style={{width: 16, height: 16, color: 'white'}} />
                 ) : (
-                  <Bot className="w-4 h-4 text-white" />
+                  <Bot style={{width: 16, height: 16, color: 'white'}} />
                 )}
               </div>
 
               {/* Message */}
-              <div className={cn(
-                "max-w-[80%] space-y-2",
-                msg.role === 'user' ? "items-end" : "items-start"
-              )}>
-                <div className={cn(
-                  "px-4 py-2.5 rounded-2xl text-sm leading-relaxed",
-                  msg.role === 'user' 
-                    ? "bg-primary text-primary-foreground rounded-br-md" 
-                    : "bg-card border border-border rounded-bl-md"
-                )}>
+              <div style={{maxWidth: '80%'}}>
+                <div style={{
+                  padding: '0.625rem 1rem', borderRadius: '1rem',
+                  fontSize: '0.875rem', lineHeight: 1.6,
+                  ...(msg.role === 'user'
+                    ? {
+                        background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
+                        color: 'white',
+                        borderBottomRightRadius: '0.25rem'
+                      }
+                    : {
+                        background: 'var(--glass-bg)',
+                        backdropFilter: 'blur(20px)',
+                        border: '1px solid var(--glass-border)',
+                        borderBottomLeftRadius: '0.25rem',
+                        color: 'var(--text-primary)'
+                      })
+                }}>
                   {msg.content}
                 </div>
 
                 {/* Suggestion chips */}
                 {msg.suggestions && msg.suggestions.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
+                  <div style={{display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem'}}>
                     {msg.suggestions.map((suggestion, sidx) => (
                       <button
                         key={sidx}
                         onClick={() => sendMessage(suggestion)}
-                        className="px-3 py-1.5 text-xs bg-secondary/50 hover:bg-secondary border border-border rounded-full transition-colors"
+                        style={{
+                          padding: '0.375rem 0.75rem', fontSize: '0.75rem',
+                          background: 'var(--glass-bg)', backdropFilter: 'blur(10px)',
+                          border: '1px solid var(--glass-border)',
+                          borderRadius: 'var(--radius-full)',
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer', transition: 'all 150ms ease'
+                        }}
                       >
                         {suggestion}
                       </button>
@@ -280,7 +309,7 @@ export function AICoach() {
                 )}
 
                 {/* Timestamp */}
-                <div className="text-[10px] text-muted-foreground px-1">
+                <div style={{fontSize: '0.625rem', color: 'var(--text-muted)', padding: '0.25rem 0.25rem 0', marginTop: '0.25rem'}}>
                   {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
@@ -289,25 +318,34 @@ export function AICoach() {
 
           {/* Loading indicator */}
           {isLoading && (
-            <div className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-                <Bot className="w-4 h-4 text-white" />
+            <div style={{display: 'flex', gap: '0.75rem'}}>
+              <div style={{
+                width: 32, height: 32, borderRadius: '50%',
+                background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <Bot style={{width: 16, height: 16, color: 'white'}} />
               </div>
-              <div className="bg-card border border-border rounded-2xl rounded-bl-md px-4 py-3">
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              <div style={{
+                background: 'var(--glass-bg)', backdropFilter: 'blur(20px)',
+                border: '1px solid var(--glass-border)',
+                borderRadius: '1rem', borderBottomLeftRadius: '0.25rem',
+                padding: '0.75rem 1rem'
+              }}>
+                <div style={{display: 'flex', gap: '0.25rem'}}>
+                  <span style={{width: 8, height: 8, background: 'var(--primary)', borderRadius: '50%', animation: 'bounce 1.4s infinite', animationDelay: '0ms'}} />
+                  <span style={{width: 8, height: 8, background: 'var(--primary)', borderRadius: '50%', animation: 'bounce 1.4s infinite', animationDelay: '150ms'}} />
+                  <span style={{width: 8, height: 8, background: 'var(--primary)', borderRadius: '50%', animation: 'bounce 1.4s infinite', animationDelay: '300ms'}} />
                 </div>
               </div>
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-border/50 bg-card/50">
-        <div className="flex gap-2">
+      <div style={{padding: '1rem', borderTop: '1px solid var(--glass-border)', background: 'var(--glass-bg)', backdropFilter: 'blur(20px)'}}>
+        <div style={{display: 'flex', gap: '0.5rem'}}>
           <input
             ref={inputRef}
             type="text"
@@ -315,57 +353,66 @@ export function AICoach() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && sendMessage(input)}
             placeholder="Ask about your health, recovery, nutrition..."
-            className="flex-1 px-4 py-3 bg-background border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+            style={{
+              flex: 1, padding: '0.75rem 1rem',
+              background: 'var(--bg-input)',
+              border: '1px solid var(--glass-border)',
+              borderRadius: 'var(--radius)',
+              fontSize: '0.875rem', color: 'var(--text-primary)'
+            }}
             disabled={isLoading}
           />
-          <Button
+          <button
             onClick={() => sendMessage(input)}
             disabled={!input.trim() || isLoading}
-            className="px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700"
+            style={{
+              padding: '0.75rem 1rem',
+              background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
+              color: 'white', border: 'none',
+              borderRadius: 'var(--radius)', cursor: 'pointer',
+              opacity: !input.trim() || isLoading ? 0.5 : 1
+            }}
           >
-            <Send className="w-4 h-4" />
-          </Button>
+            <Send style={{width: 16, height: 16}} />
+          </button>
         </div>
 
         {/* Quick actions */}
-        <div className="flex gap-2 mt-3 overflow-x-auto scrollbar-hide">
-          <button
-            onClick={() => sendMessage("How's my recovery today?")}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-secondary/50 hover:bg-secondary rounded-full transition-colors whitespace-nowrap"
-          >
-            <Heart className="w-3 h-3 text-red-500" />
-            Recovery
-          </button>
-          <button
-            onClick={() => sendMessage("Am I hitting my nutrition goals?")}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-secondary/50 hover:bg-secondary rounded-full transition-colors whitespace-nowrap"
-          >
-            <Utensils className="w-3 h-3 text-orange-500" />
-            Nutrition
-          </button>
-          <button
-            onClick={() => sendMessage("How did I sleep last night?")}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-secondary/50 hover:bg-secondary rounded-full transition-colors whitespace-nowrap"
-          >
-            <Moon className="w-3 h-3 text-blue-500" />
-            Sleep
-          </button>
-          <button
-            onClick={() => sendMessage("What should I eat for dinner?")}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-secondary/50 hover:bg-secondary rounded-full transition-colors whitespace-nowrap"
-          >
-            <Flame className="w-3 h-3 text-amber-500" />
-            Meal Ideas
-          </button>
-          <button
-            onClick={() => sendMessage("How can I improve my health?")}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-secondary/50 hover:bg-secondary rounded-full transition-colors whitespace-nowrap"
-          >
-            <TrendingUp className="w-3 h-3 text-emerald-500" />
-            Tips
-          </button>
+        <div style={{display: 'flex', gap: '0.5rem', marginTop: '0.75rem', overflowX: 'auto'}}>
+          {[
+            { label: 'Recovery', icon: <Heart style={{width: 12, height: 12, color: '#ef4444'}} />, msg: "How's my recovery today?" },
+            { label: 'Nutrition', icon: <Utensils style={{width: 12, height: 12, color: 'var(--orange)'}} />, msg: "Am I hitting my nutrition goals?" },
+            { label: 'Sleep', icon: <Moon style={{width: 12, height: 12, color: 'var(--primary)'}} />, msg: "How did I sleep last night?" },
+            { label: 'Meal Ideas', icon: <Flame style={{width: 12, height: 12, color: '#f59e0b'}} />, msg: "What should I eat for dinner?" },
+            { label: 'Tips', icon: <TrendingUp style={{width: 12, height: 12, color: 'var(--accent)'}} />, msg: "How can I improve my health?" }
+          ].map((action, i) => (
+            <button
+              key={i}
+              onClick={() => sendMessage(action.msg)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.375rem',
+                padding: '0.375rem 0.75rem', fontSize: '0.75rem',
+                background: 'var(--glass-bg)', backdropFilter: 'blur(10px)',
+                border: '1px solid var(--glass-border)',
+                borderRadius: 'var(--radius-full)',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer', whiteSpace: 'nowrap',
+                transition: 'all 150ms ease'
+              }}
+            >
+              {action.icon}
+              {action.label}
+            </button>
+          ))}
         </div>
       </div>
+
+      <style>{`
+        @keyframes bounce {
+          0%, 80%, 100% { transform: scale(0); }
+          40% { transform: scale(1); }
+        }
+      `}</style>
     </div>
   );
 }

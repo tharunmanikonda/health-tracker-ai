@@ -98,7 +98,7 @@ router.get('/metrics', async (req, res) => {
     let query = 'SELECT * FROM whoop_metrics WHERE user_id = $1';
     const params = [userId];
     let nextParam = 2;
-    
+
     if (start) {
       query += ` AND date >= $${nextParam}`;
       params.push(start);

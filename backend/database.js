@@ -427,6 +427,77 @@ async function createTables() {
       CREATE INDEX IF NOT EXISTS idx_chat_messages_user ON ai_chat_messages(user_id, created_at)
     `);
 
+    // Teams
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS teams (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        invite_code TEXT UNIQUE NOT NULL,
+        invite_expires_at TIMESTAMP,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        max_members INTEGER DEFAULT 15,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Team members
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS team_members (
+        id SERIAL PRIMARY KEY,
+        team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        role TEXT DEFAULT 'member' CHECK (role IN ('leader', 'member')),
+        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(team_id, user_id)
+      )
+    `);
+
+    // Challenges
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS challenges (
+        id SERIAL PRIMARY KEY,
+        team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        description TEXT,
+        metric_type TEXT CHECK (metric_type IN ('calories_burned', 'steps', 'water_intake', 'protein_goal', 'workout_count', 'sleep_hours')),
+        target_value REAL NOT NULL,
+        target_unit TEXT NOT NULL,
+        start_date DATE,
+        end_date DATE,
+        created_by INTEGER REFERENCES users(id),
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CHECK (end_date > start_date)
+      )
+    `);
+
+    // Challenge participants
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS challenge_participants (
+        id SERIAL PRIMARY KEY,
+        challenge_id INTEGER REFERENCES challenges(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(challenge_id, user_id)
+      )
+    `);
+
+    // Challenge progress (daily snapshot per user)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS challenge_progress (
+        id SERIAL PRIMARY KEY,
+        challenge_id INTEGER REFERENCES challenges(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        date DATE NOT NULL,
+        current_value REAL DEFAULT 0,
+        percentage REAL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(challenge_id, user_id, date)
+      )
+    `);
+
     // Create indexes for performance
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_food_logs_user_timestamp ON food_logs(user_id, timestamp);
@@ -446,6 +517,10 @@ async function createTables() {
       CREATE INDEX IF NOT EXISTS idx_garmin_events_user_created ON garmin_webhook_events(user_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_garmin_events_processed ON garmin_webhook_events(processed, created_at);
       CREATE INDEX IF NOT EXISTS idx_garmin_documents_user_day ON garmin_documents(user_id, day);
+      CREATE INDEX IF NOT EXISTS idx_teams_invite_code ON teams(invite_code);
+      CREATE INDEX IF NOT EXISTS idx_team_members_user ON team_members(user_id);
+      CREATE INDEX IF NOT EXISTS idx_challenges_team ON challenges(team_id, is_active);
+      CREATE INDEX IF NOT EXISTS idx_challenge_progress_challenge ON challenge_progress(challenge_id, date);
     `);
 
     await client.query('COMMIT');

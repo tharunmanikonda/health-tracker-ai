@@ -109,14 +109,14 @@ async function handleStatusRequest() {
   const today = new Date().toISOString().split('T')[0];
   
   const summary = await db.get(`
-    SELECT 
+    SELECT
       SUM(calories) as total_calories,
       SUM(protein) as total_protein
-    FROM food_logs 
-    WHERE DATE(timestamp) = ?
+    FROM food_logs
+    WHERE DATE(timestamp) = $1
   `, [today]);
 
-  const whoop = await db.get('SELECT recovery_score FROM whoop_metrics WHERE date = ?', [today]);
+  const whoop = await db.get('SELECT recovery_score FROM whoop_metrics WHERE date = $1', [today]);
 
   let msg = `📊 Today's Stats\n\n`;
   msg += `🍽️ Food: ${Math.round(summary?.total_calories || 0)} cal`;

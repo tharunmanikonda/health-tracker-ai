@@ -10,7 +10,7 @@ const upload = multer({ dest: 'uploads/' });
 
 // Get user ID from authenticated request
 function getUserId(req) {
-  return req.user?.id;
+  return req.user?.userId || req.user?.id;
 }
 
 // ========== FOOD LOGGING ==========

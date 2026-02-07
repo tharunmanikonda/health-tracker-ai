@@ -119,7 +119,7 @@ export interface HealthPermissions {
 
 // WebView message types
 export interface WebViewMessage {
-  type: 'health_data' | 'auth_token' | 'sync_request' | 'sync_status' | 'error';
+  type: 'health_data' | 'auth_token' | 'sync_request' | 'sync_status' | 'navigate_scan' | 'error';
   payload: any;
 }
 

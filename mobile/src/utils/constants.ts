@@ -8,10 +8,10 @@ import {Platform} from 'react-native';
 // Update this IP if your network changes
 const LOCAL_IP = '10.0.0.116';
 export const API_BASE_URL = __DEV__
-  ? `http://${LOCAL_IP}:3001/api`
+  ? `http://${LOCAL_IP}:8000/api`
   : 'https://your-production-domain.com/api';
 export const WEBAPP_URL = __DEV__
-  ? `http://${LOCAL_IP}:3000`
+  ? `http://${LOCAL_IP}:5173`
   : 'https://your-production-domain.com';
 
 // Health data constants

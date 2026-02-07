@@ -45,9 +45,9 @@ class WhoopService {
     this.loadTokensFromDb();
   }
 
-  async loadTokensFromDb() {
+  async loadTokensFromDb(userId = 1) {
     try {
-      const row = await db.get('SELECT whoop_access_token, whoop_refresh_token, whoop_token_expiry FROM user_settings WHERE id = 1');
+      const row = await db.get('SELECT whoop_access_token, whoop_refresh_token, whoop_token_expiry FROM user_settings WHERE user_id = $1', [userId]);
       if (row) {
         this.accessToken = row.whoop_access_token;
         this.refreshToken = row.whoop_refresh_token;
@@ -61,16 +61,16 @@ class WhoopService {
     }
   }
 
-  async saveTokensToDb() {
+  async saveTokensToDb(userId = 1) {
     try {
       await db.run(`
-        INSERT INTO user_settings (id, whoop_access_token, whoop_refresh_token, whoop_token_expiry)
+        INSERT INTO user_settings (user_id, whoop_access_token, whoop_refresh_token, whoop_token_expiry)
         VALUES ($1, $2, $3, $4)
-        ON CONFLICT(id) DO UPDATE SET
+        ON CONFLICT(user_id) DO UPDATE SET
           whoop_access_token = EXCLUDED.whoop_access_token,
           whoop_refresh_token = EXCLUDED.whoop_refresh_token,
           whoop_token_expiry = EXCLUDED.whoop_token_expiry
-      `, [1, this.accessToken, this.refreshToken, this.tokenExpiry]);
+      `, [userId, this.accessToken, this.refreshToken, this.tokenExpiry]);
       console.log('[WHOOP] Tokens saved to database');
     } catch (err) {
       console.error('[WHOOP] Failed to save tokens:', err);

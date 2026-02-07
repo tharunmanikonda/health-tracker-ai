@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Html5Qrcode } from 'html5-qrcode'
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 import { 
   Scan, Check, X, Loader2, Sparkles, ArrowLeft,
   Flame, Dumbbell, Wheat as WheatIcon, Droplets,
@@ -45,33 +45,31 @@ function BarcodeScanner() {
       
       setDebug('Permission granted, initializing scanner...')
       
-      // Initialize Html5Qrcode
-      html5QrCodeRef.current = new Html5Qrcode('reader')
-      
-      const config = {
-        fps: 15,
-        qrbox: { width: 280, height: 180 },
-        aspectRatio: 1.777,
+      // Initialize Html5Qrcode with barcode formats in constructor (required by API)
+      html5QrCodeRef.current = new Html5Qrcode('reader', {
         formatsToSupport: [
-          0,  // QR_CODE
-          1,  // AZTEC
-          2,  // CODABAR
-          3,  // CODE_39
-          4,  // CODE_93
-          5,  // CODE_128
-          6,  // DATA_MATRIX
-          7,  // MAXICODE
-          8,  // ITF
-          9,  // EAN_13
-          10, // EAN_8
-          11, // PDF_417
-          12, // RSS_14
-          13, // RSS_EXPANDED
-          14, // SMS
-          15, // UPC_A
-          16, // UPC_E
-          17  // UPC_EAN_EXTENSION
-        ]
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.UPC_EAN_EXTENSION,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.ITF,
+        ],
+        // Disable native BarcodeDetector - has format mapping bugs in Chrome
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: false
+        },
+        verbose: false,
+      })
+
+      const config = {
+        fps: 10,
+        qrbox: { width: 300, height: 150 },
+        aspectRatio: 1.777,
+        disableFlip: false,
       }
 
       setDebug('Starting camera...')
@@ -80,8 +78,8 @@ function BarcodeScanner() {
         { facingMode: 'environment' },
         config,
         (decodedText, decodedResult) => {
-          console.log('✅ BARCODE DETECTED:', decodedText, decodedResult)
-          setDebug('✅ DETECTED: ' + decodedText)
+          console.log('[OK] BARCODE DETECTED:', decodedText, decodedResult)
+          setDebug('DETECTED: ' + decodedText)
           handleScan(decodedText)
         },
         (errorMessage) => {
@@ -99,11 +97,14 @@ function BarcodeScanner() {
       if (navigator.vibrate) navigator.vibrate(50)
       
       // Add visible feedback for scanning
-      setInterval(() => {
-        if (html5QrCodeRef.current && !loading && !scannedProduct) {
-          setDebug(prev => prev.includes('Point') ? 'Point camera at barcode...' : 'Point camera at barcode...')
+      const feedbackInterval = setInterval(() => {
+        if (html5QrCodeRef.current) {
+          setDebug('Point camera at barcode...')
         }
       }, 3000)
+
+      // Store interval for cleanup
+      window._barcodeScannerInterval = feedbackInterval
       
     } catch (err) {
       console.error('Camera error:', err)
@@ -119,6 +120,10 @@ function BarcodeScanner() {
   }
 
   const stopScanner = async () => {
+    if (window._barcodeScannerInterval) {
+      clearInterval(window._barcodeScannerInterval)
+      window._barcodeScannerInterval = null
+    }
     if (html5QrCodeRef.current) {
       try {
         await html5QrCodeRef.current.stop()
@@ -148,54 +153,66 @@ function BarcodeScanner() {
     // Pause scanner while processing
     if (html5QrCodeRef.current) {
       try {
-        await html5QrCodeRef.current.pause()
+        html5QrCodeRef.current.pause(true)
       } catch (e) {}
     }
     
     try {
-      const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${decodedText}.json`)
+      // Use OpenFoodFacts API v2 with specific fields for faster response
+      const apiFields = 'product_name,generic_name,brands,image_url,image_front_url,serving_size,serving_quantity,nutriments,nutriscore_grade,nova_group'
+      const response = await fetch(
+        `https://world.openfoodfacts.org/api/v2/product/${decodedText}?fields=${apiFields}`
+      )
       const data = await response.json()
-      
+
       if (data.status === 1 && data.product) {
         const product = data.product
         const nutriments = product.nutriments || {}
-        
+
         const servingSize = parseFloat(product.serving_quantity) || 100
         const multiplier = servingSize / 100
-        
+
+        // Use ?? (nullish coalescing) so 0 values aren't skipped
+        const kcalPer100 = nutriments['energy-kcal_100g']
+          ?? nutriments['energy-kcal']
+          ?? (nutriments['energy_100g'] != null ? nutriments['energy_100g'] / 4.184 : 0)
+
         setScannedProduct({
           barcode: decodedText,
           name: product.product_name || product.generic_name || 'Unknown Product',
           brand: product.brands?.split(',')[0] || '',
           image_url: product.image_url || product.image_front_url || '',
           serving_size: product.serving_size || '100g',
-          calories: Math.round((nutriments['energy-kcal_100g'] || nutriments['energy-kcal'] || nutriments['energy_100g'] / 4.184 || 0) * multiplier),
-          protein: parseFloat((nutriments.proteins_100g || 0) * multiplier).toFixed(1),
-          carbs: parseFloat((nutriments.carbohydrates_100g || 0) * multiplier).toFixed(1),
-          fat: parseFloat((nutriments.fat_100g || 0) * multiplier).toFixed(1),
-          fiber: parseFloat((nutriments.fiber_100g || 0) * multiplier).toFixed(1),
-          sugar: parseFloat((nutriments.sugars_100g || 0) * multiplier).toFixed(1),
-          sodium: Math.round((nutriments.sodium_100g || 0) * multiplier * 1000),
+          calories: Math.round((kcalPer100 ?? 0) * multiplier),
+          protein: ((nutriments.proteins_100g ?? 0) * multiplier).toFixed(1),
+          carbs: ((nutriments.carbohydrates_100g ?? 0) * multiplier).toFixed(1),
+          fat: ((nutriments.fat_100g ?? 0) * multiplier).toFixed(1),
+          fiber: ((nutriments.fiber_100g ?? 0) * multiplier).toFixed(1),
+          sugar: ((nutriments.sugars_100g ?? 0) * multiplier).toFixed(1),
+          sodium: Math.round((nutriments.sodium_100g ?? 0) * multiplier * 1000),
           nutriscore_grade: product.nutriscore_grade || '',
           nova_group: product.nova_group || ''
         })
-        
+
         if (navigator.vibrate) navigator.vibrate([50, 100, 50])
       } else {
-        setError('Product not found in database')
+        setError(`Product not found (${decodedText})`)
         setTimeout(() => {
           setError(null)
+          setScanningBarcode(null)
           if (html5QrCodeRef.current) {
-            html5QrCodeRef.current.resume()
+            try { html5QrCodeRef.current.resume() } catch (e) {}
           }
         }, 3000)
       }
     } catch (err) {
-      setError('Failed to lookup product')
+      console.error('API lookup failed:', err)
+      setError('Failed to lookup product - check connection')
       setTimeout(() => {
         setError(null)
+        setScanningBarcode(null)
         if (html5QrCodeRef.current) {
-          html5QrCodeRef.current.resume()
+          try { html5QrCodeRef.current.resume() } catch (e) {}
         }
       }, 3000)
     } finally {

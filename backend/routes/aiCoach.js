@@ -7,7 +7,7 @@ const db = require('../database');
 // Get chat history
 router.get('/history', async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = (req.user.userId || req.user.id);
     const { limit = 50 } = req.query;
     
     const messages = await db.all(`
@@ -36,7 +36,7 @@ router.get('/history', async (req, res) => {
 // Send message to AI coach
 router.post('/message', async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = (req.user.userId || req.user.id);
     const { message, conversationId = null } = req.body;
     
     if (!message || message.trim() === '') {
@@ -109,12 +109,24 @@ async function getHealthContext(userId) {
     
     // Latest wearable data (Fitbit, Google Fit, etc.)
     const wearableData = await db.get(`
-      SELECT 
+      SELECT
         SUM(CASE WHEN metric_type = 'steps' THEN value ELSE 0 END) as steps,
-        AVG(CASE WHEN metric_type = 'heart_rate' THEN value END) as avg_hr,
-        SUM(CASE WHEN metric_type = 'active_calories' THEN value ELSE 0 END) as active_calories
-      FROM mobile_health_metrics 
+        AVG(CASE WHEN metric_type IN ('heart_rate', 'resting_heart_rate') THEN value END) as avg_hr,
+        SUM(CASE WHEN metric_type = 'active_calories' THEN value ELSE 0 END) as active_calories,
+        MAX(CASE WHEN metric_type = 'hrv' THEN value END) as hrv,
+        MAX(CASE WHEN metric_type = 'active_zone_minutes' THEN value END) as active_zone_minutes,
+        MAX(CASE WHEN metric_type = 'distance' THEN value END) as distance,
+        MAX(CASE WHEN metric_type = 'floors' THEN value END) as floors
+      FROM mobile_health_metrics
       WHERE user_id = $1 AND created_at::date = CURRENT_DATE
+    `, [userId]);
+
+    // Fitbit sleep data (more detailed than manual sleep)
+    const fitbitSleep = await db.get(`
+      SELECT value, metadata FROM mobile_health_metrics
+      WHERE user_id = $1 AND source = 'fitbit' AND metric_type = 'sleep'
+      AND created_at::date = CURRENT_DATE
+      ORDER BY created_at DESC LIMIT 1
     `, [userId]);
     
     // Recent weight
@@ -158,8 +170,16 @@ async function getHealthContext(userId) {
         water: Math.round(todayWater?.total || 0),
         steps: Math.round(wearableData?.steps || 0),
         activeCalories: Math.round(wearableData?.active_calories || 0),
-        avgHeartRate: wearableData?.avg_hr ? Math.round(wearableData.avg_hr) : null
+        avgHeartRate: wearableData?.avg_hr ? Math.round(wearableData.avg_hr) : null,
+        hrv: wearableData?.hrv ? Math.round(wearableData.hrv) : null,
+        activeZoneMinutes: wearableData?.active_zone_minutes ? Math.round(wearableData.active_zone_minutes) : null,
+        distance: wearableData?.distance ? Math.round(wearableData.distance * 100) / 100 : null,
+        floors: wearableData?.floors ? Math.round(wearableData.floors) : null
       },
+      fitbitSleep: fitbitSleep ? {
+        minutesAsleep: fitbitSleep.value,
+        ...(fitbitSleep.metadata ? JSON.parse(fitbitSleep.metadata) : {})
+      } : null,
       goals: {
         calories: userGoals?.daily_calorie_goal || 2500,
         protein: userGoals?.daily_protein_goal || 150
@@ -255,6 +275,11 @@ CURRENT USER DATA (Today):
 - Fat: ${context.today?.fat || 0}g
 - Water: ${context.today?.water || 0}ml
 - Steps: ${context.today?.steps || 0}
+${context.today?.activeZoneMinutes ? `- Active Zone Minutes: ${context.today.activeZoneMinutes}` : ''}
+${context.today?.distance ? `- Distance: ${context.today.distance} km` : ''}
+${context.today?.floors ? `- Floors: ${context.today.floors}` : ''}
+${context.today?.avgHeartRate ? `- Avg Heart Rate: ${context.today.avgHeartRate} bpm` : ''}
+${context.today?.hrv ? `- HRV (RMSSD): ${context.today.hrv}ms` : ''}
 ${context.whoop ? `
 WHOOP DATA:
 - Recovery Score: ${context.whoop.recovery}%
@@ -263,6 +288,15 @@ WHOOP DATA:
 - Resting HR: ${context.whoop.restingHR} bpm
 - HRV: ${context.whoop.hrv}ms
 - Sleep: ${context.whoop.sleepHours} hours
+` : ''}
+${context.fitbitSleep ? `
+FITBIT SLEEP DATA:
+- Total Sleep: ${Math.round((context.fitbitSleep.minutesAsleep || 0) / 60 * 10) / 10} hours
+- Efficiency: ${context.fitbitSleep.efficiency || '--'}%
+${context.fitbitSleep.stages ? `- Deep Sleep: ${context.fitbitSleep.stages.deep || 0} min
+- REM Sleep: ${context.fitbitSleep.stages.rem || 0} min
+- Light Sleep: ${context.fitbitSleep.stages.light || 0} min
+- Awake: ${context.fitbitSleep.stages.wake || 0} min` : ''}
 ` : ''}
 ${context.weight ? `Current Weight: ${context.weight.value} ${context.weight.unit}` : ''}
 
@@ -276,9 +310,11 @@ GUIDELINES:
 3. If recovery is low (<50%), suggest lighter activity
 4. If protein is low, suggest high-protein foods
 5. Keep responses concise (2-3 short paragraphs max)
-6. Use emojis occasionally to keep it friendly
-7. If you don't have certain data, ask the user to log it
-8. Never make up data - only use what's provided above
+6. If you don't have certain data, ask the user to log it
+7. Never make up data - only use what's provided above
+8. When HRV data is available, use it for recovery assessment (higher is better, >40ms is good)
+9. Use Active Zone Minutes to assess workout intensity (WHO recommends 150 min/week)
+10. Use sleep stage data to provide specific sleep improvement advice
 
 Today's date: ${context.date}`;
 }
@@ -351,7 +387,7 @@ function generateFallbackResponse(message, context) {
 // Quick insights endpoint
 router.get('/insights', async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = (req.user.userId || req.user.id);
     const context = await getHealthContext(userId);
     
     // Generate insights based on data
@@ -423,6 +459,50 @@ router.get('/insights', async (req, res) => {
         action: 'Log water'
       });
     }
+
+    // HRV insight (from Fitbit or wearable)
+    if (context.today?.hrv) {
+      if (context.today.hrv < 25) {
+        insights.push({
+          type: 'recovery',
+          priority: 'high',
+          title: 'Low HRV Detected',
+          message: `Your HRV is ${context.today.hrv}ms. Consider extra rest and stress management.`,
+          action: 'Recovery tips'
+        });
+      } else if (context.today.hrv > 50) {
+        insights.push({
+          type: 'recovery',
+          priority: 'low',
+          title: 'Strong HRV',
+          message: `HRV at ${context.today.hrv}ms indicates great recovery!`,
+          action: 'Plan workout'
+        });
+      }
+    }
+
+    // Fitbit sleep insight
+    if (context.fitbitSleep) {
+      const sleepHours = (context.fitbitSleep.minutesAsleep || 0) / 60;
+      if (sleepHours > 0 && sleepHours < 6) {
+        insights.push({
+          type: 'sleep',
+          priority: 'high',
+          title: 'Short Sleep',
+          message: `Only ${sleepHours.toFixed(1)} hours of sleep. Aim for 7-9 hours.`,
+          action: 'Sleep tips'
+        });
+      }
+      if (context.fitbitSleep.efficiency && context.fitbitSleep.efficiency < 80) {
+        insights.push({
+          type: 'sleep',
+          priority: 'medium',
+          title: 'Low Sleep Efficiency',
+          message: `${context.fitbitSleep.efficiency}% efficiency. Try a consistent bedtime.`,
+          action: 'Improve sleep'
+        });
+      }
+    }
     
     res.json({
       success: true,
@@ -441,7 +521,7 @@ router.get('/insights', async (req, res) => {
 // Clear chat history
 router.delete('/history', async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = (req.user.userId || req.user.id);
     await db.run('DELETE FROM ai_chat_messages WHERE user_id = $1', [userId]);
     res.json({ success: true, message: 'Chat history cleared' });
   } catch (err) {

@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
-import { 
-  Plus, Trash2, Search, Utensils, X, 
+import { useNavigate } from 'react-router-dom'
+import {
+  Plus, Trash2, Search, Utensils, X, ScanLine,
   Flame, Dumbbell, Wheat as WheatIcon, Droplets,
   Calendar, ChevronDown, Filter
 } from 'lucide-react'
 
 function FoodLog() {
+  const navigate = useNavigate()
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -114,6 +116,15 @@ function FoodLog() {
           {showAddForm ? <X size={20} /> : <Plus size={20} />}
         </button>
       </div>
+
+      {/* Scan Barcode Button */}
+      <button
+        className="btn btn-secondary btn-block mb-2"
+        onClick={() => navigate('/scan')}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+      >
+        <ScanLine size={18} /> Scan Barcode
+      </button>
 
       {/* Date Selector */}
       <div className="card" style={{marginBottom: '1rem', padding: '0.75rem 1rem'}}>

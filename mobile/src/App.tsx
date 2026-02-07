@@ -5,7 +5,6 @@
 
 import React, {useEffect, useState, useCallback} from 'react';
 import {
-  SafeAreaView,
   StyleSheet,
   View,
   Text,
@@ -16,6 +15,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {WebAppContainer} from './components/WebAppContainer';
+import {NativeBarcodeScanner} from './components/NativeBarcodeScanner';
 import {healthSyncService} from './services/healthSync';
 import {databaseService} from './services/database';
 import {backgroundTaskService, headlessTask} from './services/backgroundTask';
@@ -27,8 +27,8 @@ import type {HealthPermissions} from './types';
 
 // Register Android headless task
 if (Platform.OS === 'android') {
-  const BackgroundTask = require('react-native-background-task');
-  BackgroundTask.define(headlessTask);
+  const BackgroundFetch = require('react-native-background-fetch').default;
+  BackgroundFetch.registerHeadlessTask(headlessTask);
 }
 
 const App: React.FC = () => {
@@ -36,6 +36,8 @@ const App: React.FC = () => {
   const [hasPermissions, setHasPermissions] = useState(false);
   const [showPermissionPrompt, setShowPermissionPrompt] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [webViewNavigateTo, setWebViewNavigateTo] = useState<string | null>(null);
   const [todaySummary, setTodaySummary] = useState({
     steps: 0,
     activeCalories: 0,
@@ -156,10 +158,16 @@ const App: React.FC = () => {
     }
   }, [isSyncing]);
 
+  // Handle scan request from WebView
+  const handleScanRequested = useCallback(() => {
+    console.log('[App] Native scanner requested');
+    setShowScanner(true);
+  }, []);
+
   // Handle messages from WebView
   const handleWebViewMessage = useCallback((message: any) => {
     console.log('[App] Message from WebView:', message);
-    
+
     // Handle any app-level message processing here
     switch (message.type) {
       case 'health_data':
@@ -177,7 +185,7 @@ const App: React.FC = () => {
         <View style={styles.permissionCard}>
           <Text style={styles.permissionTitle}>Enable Health Access</Text>
           <Text style={styles.permissionText}>
-            Health Tracker needs access to your health data to provide insights and sync with your dashboard.
+            HealthSync needs access to your health data to provide insights and sync with your dashboard.
           </Text>
           <Text style={styles.permissionSubtext}>
             We can access: Steps, Heart Rate, Sleep, Workouts, and Calories
@@ -234,58 +242,78 @@ const App: React.FC = () => {
 
   if (!isInitialized) {
     return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" />
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-      
-      {/* Sync Status Bar */}
-      {renderSyncStatus()}
-      
-      {/* Main WebView */}
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+
+      {/* Main WebView - full screen edge-to-edge */}
       <View style={styles.webviewContainer}>
-        <WebAppContainer onMessage={handleWebViewMessage} />
+        <WebAppContainer
+          onMessage={handleWebViewMessage}
+          onScanRequested={handleScanRequested}
+          navigateTo={webViewNavigateTo}
+        />
       </View>
-      
+
+      {/* Native Barcode Scanner - full screen overlay with own safe areas */}
+      {showScanner && (
+        <View style={styles.scannerOverlay}>
+          <NativeBarcodeScanner
+            onClose={() => setShowScanner(false)}
+            onFoodLogged={() => {
+              console.log('[App] Food logged via native scanner');
+              // Navigate to dashboard and trigger refresh
+              setWebViewNavigateTo('/?' + Date.now());
+            }}
+          />
+        </View>
+      )}
+
       {/* Permission Prompt */}
       {renderPermissionPrompt()}
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#0B1121',
   },
   webviewContainer: {
     flex: 1,
+  },
+  scannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#0B1121',
   },
   loadingText: {
     fontSize: 18,
-    color: '#666',
+    color: '#94A3B8',
   },
   statusBar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#111827',
     borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
+    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   statusItem: {
     flex: 1,
@@ -294,11 +322,11 @@ const styles = StyleSheet.create({
   statusValue: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#212529',
+    color: '#F1F5F9',
   },
   statusLabel: {
     fontSize: 11,
-    color: '#6c757d',
+    color: '#64748B',
     marginTop: 2,
   },
   syncButton: {
@@ -327,7 +355,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   permissionCard: {
-    backgroundColor: '#fff',
+    backgroundColor: '#1E293B',
     borderRadius: 16,
     padding: 24,
     width: '100%',
@@ -337,24 +365,26 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   permissionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#212529',
+    color: '#F1F5F9',
     marginBottom: 12,
     textAlign: 'center',
   },
   permissionText: {
     fontSize: 15,
-    color: '#495057',
+    color: '#CBD5E1',
     lineHeight: 22,
     marginBottom: 12,
     textAlign: 'center',
   },
   permissionSubtext: {
     fontSize: 13,
-    color: '#6c757d',
+    color: '#64748B',
     marginBottom: 20,
     textAlign: 'center',
   },

@@ -10,7 +10,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Health Tracker</string>
+	<string>HealthSync</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -32,14 +32,18 @@
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
-		<false/>
+		<true/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>HealthSync needs camera access to scan food barcodes for nutrition tracking.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Health Tracker needs access to your health data to provide insights and sync with your dashboard. This includes steps, heart rate, sleep, workouts, and calories.</string>
+	<string>HealthSync needs access to your health data to provide insights and sync with your dashboard. This includes steps, heart rate, sleep, workouts, and calories.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>Health Tracker needs permission to read your health data for tracking and analysis.</string>
+	<string>HealthSync needs permission to read your health data for tracking and analysis.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>HealthSync does not use the microphone but camera access requires this permission.</string>
 	<key>NSPrivacyManifestFilePath</key>
 	<string>PrivacyInfo.xcprivacy</string>
 	<key>RCTDevMenu</key>

@@ -132,33 +132,36 @@ function Insights() {
                 tickFormatter={(date) => new Date(date).toLocaleDateString('en-US', {weekday: 'short'})}
                 fontSize={12}
               />
-              <YAxis yAxisId="left" stroke="var(--accent)" fontSize={12} />
-              <YAxis yAxisId="right" orientation="right" stroke="#8b5cf6" domain={[0, 100]} fontSize={12} />
-              <Tooltip 
+              <YAxis yAxisId="left" stroke="#0EA5E9" fontSize={12} />
+              <YAxis yAxisId="right" orientation="right" stroke="#8B5CF6" domain={[0, 100]} fontSize={12} />
+              <Tooltip
                 contentStyle={{
-                  background: 'var(--bg-card)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px'
+                  background: 'var(--glass-bg)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid var(--glass-border)',
+                  borderRadius: '12px',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+                  color: 'var(--text-primary)'
                 }}
               />
               <Legend />
-              <Line 
-                yAxisId="left" 
-                type="monotone" 
-                dataKey="total_calories" 
-                stroke="var(--accent)" 
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="total_calories"
+                stroke="#0EA5E9"
                 name="Calories"
                 strokeWidth={2}
-                dot={{ fill: 'var(--accent)' }}
+                dot={{ fill: '#0EA5E9' }}
               />
-              <Line 
-                yAxisId="right" 
-                type="monotone" 
-                dataKey="whoop_recovery" 
-                stroke="#8b5cf6" 
+              <Line
+                yAxisId="right"
+                type="monotone"
+                dataKey="whoop_recovery"
+                stroke="#8B5CF6"
                 name="Recovery %"
                 strokeWidth={2}
-                dot={{ fill: '#8b5cf6' }}
+                dot={{ fill: '#8B5CF6' }}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -180,17 +183,20 @@ function Insights() {
                 fontSize={12}
               />
               <YAxis stroke="var(--text-muted)" fontSize={12} />
-              <Tooltip 
+              <Tooltip
                 contentStyle={{
-                  background: 'var(--bg-card)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px'
+                  background: 'var(--glass-bg)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid var(--glass-border)',
+                  borderRadius: '12px',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+                  color: 'var(--text-primary)'
                 }}
               />
               <Legend />
-              <Bar dataKey="total_protein" stackId="a" fill="var(--success)" name="Protein (g)" />
-              <Bar dataKey="total_carbs" stackId="a" fill="#3b82f6" name="Carbs (g)" />
-              <Bar dataKey="total_fat" stackId="a" fill="var(--warning)" name="Fat (g)" />
+              <Bar dataKey="total_protein" stackId="a" fill="#10b981" name="Protein (g)" />
+              <Bar dataKey="total_carbs" stackId="a" fill="#0EA5E9" name="Carbs (g)" />
+              <Bar dataKey="total_fat" stackId="a" fill="#8B5CF6" name="Fat (g)" />
             </BarChart>
           </ResponsiveContainer>
         </div>

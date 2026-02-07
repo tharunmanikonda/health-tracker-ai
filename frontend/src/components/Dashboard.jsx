@@ -1,30 +1,30 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
-import { 
-  Flame, Dumbbell, Moon, Activity, TrendingUp, 
+import { useNavigate } from 'react-router-dom'
+import {
+  Flame, Dumbbell, Moon, Activity, TrendingUp,
   RefreshCw, Plus, ChevronRight, Heart, Wind,
   Thermometer, Clock, Zap, Droplets, Brain,
   Battery, Sun, Sunrise, GlassWater, Scale,
   Smile, Bed, Timer, Footprints, Pill, X,
   Trophy, ChevronUp, ChevronDown, ArrowUp, ArrowDown,
-  Utensils, ScanLine, Watch
+  Utensils, ScanLine, Frown, Meh, Laugh, Watch, Users
 } from 'lucide-react'
 
 function Dashboard() {
+  const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
-  const [whoopConnected, setWhoopConnected] = useState(false)
-  const [ouraStatus, setOuraStatus] = useState({ connected: false, webhookConfigured: false })
-  const [garminStatus, setGarminStatus] = useState({ connected: false, webhookEnabled: false })
-  const [syncingOura, setSyncingOura] = useState(false)
-  const [syncingGarmin, setSyncingGarmin] = useState(false)
-  const [integrationLoading, setIntegrationLoading] = useState(false)
-  
+  const [activeChallenges, setActiveChallenges] = useState([])
+
+  // Connected device banner state
+  const [connectedDevice, setConnectedDevice] = useState(null)
+  const [deviceSyncing, setDeviceSyncing] = useState(false)
+
   // Modal states
   const [activeModal, setActiveModal] = useState(null)
   const [modalData, setModalData] = useState({})
-  
+
   // Tracking data
   const [waterAmount, setWaterAmount] = useState(0)
   const [weight, setWeight] = useState('')
@@ -36,9 +36,17 @@ function Dashboard() {
 
   useEffect(() => {
     fetchDashboard()
-    checkWhoopStatus()
-    fetchIntegrationStatuses()
+    fetchConnectedDevice()
     fetchWater()
+    fetchActiveChallenges()
+
+    // Listen for native app events (e.g. food logged from barcode scanner)
+    const handleNativeChange = () => {
+      fetchDashboard()
+      fetchWater()
+    }
+    window.addEventListener('native-data-changed', handleNativeChange)
+    return () => window.removeEventListener('native-data-changed', handleNativeChange)
   }, [])
 
   const fetchDashboard = async () => {
@@ -51,7 +59,7 @@ function Dashboard() {
       setLoading(false)
     }
   }
-  
+
   const fetchWater = async () => {
     try {
       const res = await axios.get('/api/water/today')
@@ -61,110 +69,54 @@ function Dashboard() {
     }
   }
 
-  const checkWhoopStatus = async () => {
+  const fetchConnectedDevice = async () => {
     try {
-      const res = await axios.get('/api/whoop/status')
-      setWhoopConnected(res.data.authenticated)
-    } catch (err) {
-      setWhoopConnected(false)
-    }
-  }
-
-  const fetchIntegrationStatuses = async () => {
-    setIntegrationLoading(true)
-    try {
-      const [ouraRes, garminRes] = await Promise.allSettled([
+      const [whoopRes, ouraRes, garminRes, fitbitRes] = await Promise.allSettled([
+        axios.get('/api/whoop/status'),
         axios.get('/api/oura/status'),
-        axios.get('/api/garmin/status')
+        axios.get('/api/garmin/status'),
+        axios.get('/api/wearables/fitbit/status')
       ])
 
-      if (ouraRes.status === 'fulfilled') {
-        setOuraStatus(ouraRes.value.data?.status || { connected: false, webhookConfigured: false })
+      if (whoopRes.status === 'fulfilled' && whoopRes.value.data?.authenticated) {
+        setConnectedDevice({ provider: 'whoop', name: 'WHOOP' })
+      } else if (ouraRes.status === 'fulfilled' && ouraRes.value.data?.status?.connected) {
+        setConnectedDevice({ provider: 'oura', name: 'Oura Ring' })
+      } else if (garminRes.status === 'fulfilled' && garminRes.value.data?.status?.connected) {
+        setConnectedDevice({ provider: 'garmin', name: 'Garmin Watch' })
+      } else if (fitbitRes.status === 'fulfilled' && fitbitRes.value.data?.connected) {
+        setConnectedDevice({ provider: 'fitbit', name: 'Fitbit' })
       } else {
-        setOuraStatus({ connected: false, webhookConfigured: false })
+        setConnectedDevice(null)
       }
-
-      if (garminRes.status === 'fulfilled') {
-        setGarminStatus(garminRes.value.data?.status || { connected: false, webhookEnabled: false })
-      } else {
-        setGarminStatus({ connected: false, webhookEnabled: false })
-      }
-    } catch (err) {
-      console.error('Failed to load integration statuses:', err)
-    } finally {
-      setIntegrationLoading(false)
+    } catch {
+      setConnectedDevice(null)
     }
   }
 
-  const syncWhoop = async () => {
-    if (!whoopConnected) {
-      window.location.href = '/api/whoop/auth'
-      return
-    }
-    
-    setSyncing(true)
+  const syncDevice = async () => {
+    if (!connectedDevice) return
+    setDeviceSyncing(true)
     try {
-      await axios.post('/api/whoop/sync')
+      const p = connectedDevice.provider
+      if (p === 'whoop') await axios.post('/api/whoop/sync')
+      else if (p === 'fitbit') await axios.post('/api/wearables/fitbit/sync')
+      else if (p === 'oura') await axios.post('/api/oura/sync', { days: 30 })
+      else if (p === 'garmin') await axios.post('/api/garmin/sync', { days: 7 })
       await fetchDashboard()
     } catch (err) {
       console.error('Sync failed:', err)
     } finally {
-      setSyncing(false)
+      setDeviceSyncing(false)
     }
   }
 
-  const connectIntegration = async (provider) => {
+  const fetchActiveChallenges = async () => {
     try {
-      const res = await axios.get(`/api/${provider}/auth-url`)
-      const authUrl = res.data?.authUrl
-      if (!authUrl) {
-        throw new Error(`No authorization URL returned for ${provider}`)
-      }
-      window.location.href = authUrl
+      const res = await axios.get('/api/teams/my-active-challenges')
+      setActiveChallenges(res.data)
     } catch (err) {
-      console.error(`Failed to connect ${provider}:`, err)
-      alert(`Could not start ${provider} connection. Check server logs and credentials.`)
-    }
-  }
-
-  const syncOura = async () => {
-    if (!ouraStatus.connected) return
-    setSyncingOura(true)
-    try {
-      await axios.post('/api/oura/sync', { days: 30 })
-      await fetchDashboard()
-      await fetchIntegrationStatuses()
-    } catch (err) {
-      console.error('Failed to sync Oura:', err)
-      alert('Oura sync failed. Check credentials/webhook setup.')
-    } finally {
-      setSyncingOura(false)
-    }
-  }
-
-  const syncGarmin = async () => {
-    if (!garminStatus.connected) return
-    setSyncingGarmin(true)
-    try {
-      await axios.post('/api/garmin/sync', { days: 7 })
-      await fetchDashboard()
-      await fetchIntegrationStatuses()
-    } catch (err) {
-      console.error('Failed to sync Garmin:', err)
-      alert('Garmin sync failed. Verify OAuth and pull/webhook config.')
-    } finally {
-      setSyncingGarmin(false)
-    }
-  }
-
-  const disconnectIntegration = async (provider) => {
-    if (!window.confirm(`Disconnect ${provider}?`)) return
-    try {
-      await axios.post(`/api/${provider}/disconnect`)
-      await fetchIntegrationStatuses()
-    } catch (err) {
-      console.error(`Failed to disconnect ${provider}:`, err)
-      alert(`Could not disconnect ${provider}.`)
+      // Not critical, silently fail
     }
   }
 
@@ -268,9 +220,13 @@ function Dashboard() {
 
   if (!data) return null
 
-  const { totals, goals, remaining, whoop, workouts, food_logs } = data
+  const { totals, goals, remaining, whoop, workouts, food_logs, calories_burned, burned_source } = data
   const calPercent = Math.min((totals.calories / goals.daily_calorie_goal) * 100, 100)
   const proteinPercent = Math.min((totals.protein / goals.daily_protein_goal) * 100, 100)
+
+  const totalBurned = calories_burned || 0
+  const burnedGoal = goals.daily_calorie_goal // Use same goal as rough reference
+  const burnedPercent = burnedGoal > 0 ? Math.min((totalBurned / burnedGoal) * 100, 100) : 0
   const waterGoal = 2500
   const waterPercent = Math.min((waterAmount / waterGoal) * 100, 100)
 
@@ -297,7 +253,7 @@ function Dashboard() {
         <div className="modal-overlay" onClick={() => setActiveModal(null)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>💧 Log Water</h3>
+              <h3><Droplets size={18} style={{display: 'inline', verticalAlign: 'middle', marginRight: '6px'}} /> Log Water</h3>
               <button className="btn btn-icon btn-ghost" onClick={() => setActiveModal(null)}>
                 <X size={20} />
               </button>
@@ -318,7 +274,7 @@ function Dashboard() {
                 </div>
                 <div className="progress-text">
                   <span>{Math.round(waterPercent)}% of goal</span>
-                  <span>{waterGoal - waterAmount > 0 ? `${waterGoal - waterAmount}ml left` : 'Goal reached! 🎉'}</span>
+                  <span>{waterGoal - waterAmount > 0 ? `${waterGoal - waterAmount}ml left` : <><Trophy size={14} style={{display: 'inline', verticalAlign: 'middle'}} /> Goal reached!</>}</span>
                 </div>
               </div>
             </div>
@@ -329,7 +285,7 @@ function Dashboard() {
         <div className="modal-overlay" onClick={() => setActiveModal(null)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>⚖️ Log Weight</h3>
+              <h3><Scale size={18} style={{display: 'inline', verticalAlign: 'middle', marginRight: '6px'}} /> Log Weight</h3>
               <button className="btn btn-icon btn-ghost" onClick={() => setActiveModal(null)}>
                 <X size={20} />
               </button>
@@ -358,7 +314,7 @@ function Dashboard() {
         <div className="modal-overlay" onClick={() => setActiveModal(null)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>😊 How are you feeling?</h3>
+              <h3><Smile size={18} style={{display: 'inline', verticalAlign: 'middle', marginRight: '6px'}} /> How are you feeling?</h3>
               <button className="btn btn-icon btn-ghost" onClick={() => setActiveModal(null)}>
                 <X size={20} />
               </button>
@@ -372,11 +328,11 @@ function Dashboard() {
                     onClick={() => setMood(score)}
                   >
                     <span className="mood-emoji">
-                      {score === 1 && '😢'}
-                      {score === 2 && '😕'}
-                      {score === 3 && '😐'}
-                      {score === 4 && '🙂'}
-                      {score === 5 && '😄'}
+                      {score === 1 && <Frown size={24} />}
+                      {score === 2 && <Frown size={24} style={{opacity: 0.7}} />}
+                      {score === 3 && <Meh size={24} />}
+                      {score === 4 && <Smile size={24} />}
+                      {score === 5 && <Laugh size={24} />}
                     </span>
                     <span className="mood-label">
                       {score === 1 && 'Rough'}
@@ -411,7 +367,7 @@ function Dashboard() {
         <div className="modal-overlay" onClick={() => setActiveModal(null)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>🌙 Log Sleep</h3>
+              <h3><Moon size={18} style={{display: 'inline', verticalAlign: 'middle', marginRight: '6px'}} /> Log Sleep</h3>
               <button className="btn btn-icon btn-ghost" onClick={() => setActiveModal(null)}>
                 <X size={20} />
               </button>
@@ -460,7 +416,7 @@ function Dashboard() {
         <div className="modal-overlay" onClick={() => setActiveModal(null)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>💪 Log Workout</h3>
+              <h3><Dumbbell size={18} style={{display: 'inline', verticalAlign: 'middle', marginRight: '6px'}} /> Log Workout</h3>
               <button className="btn btn-icon btn-ghost" onClick={() => setActiveModal(null)}>
                 <X size={20} />
               </button>
@@ -517,7 +473,7 @@ function Dashboard() {
         <div className="modal-overlay" onClick={() => setActiveModal(null)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>💊 Log Medication</h3>
+              <h3><Pill size={18} style={{display: 'inline', verticalAlign: 'middle', marginRight: '6px'}} /> Log Medication</h3>
               <button className="btn btn-icon btn-ghost" onClick={() => setActiveModal(null)}>
                 <X size={20} />
               </button>
@@ -549,128 +505,73 @@ function Dashboard() {
 
   return (
     <div className="dashboard">
-      <div className="card integrations-panel">
-        <div className="section-header" style={{marginBottom: '0.75rem'}}>
-          <h3 className="section-title">
-            <Watch size={18} /> Device Integrations
-          </h3>
-          <button
-            className="btn btn-icon btn-ghost"
-            onClick={fetchIntegrationStatuses}
-            disabled={integrationLoading}
-            title="Refresh integration status"
-            style={{width: '32px', height: '32px', minHeight: '32px', padding: '0.3rem'}}
-          >
-            <RefreshCw size={14} className={integrationLoading ? 'spin' : ''} />
+      {/* Connected Device Banner */}
+      {connectedDevice ? (
+        <div className="device-connected-banner">
+          <div className="device-banner-info">
+            <div className={`integration-status connected`}>
+              {connectedDevice.name}
+            </div>
+            <span className="text-muted" style={{ fontSize: '0.75rem' }}>Connected</span>
+          </div>
+          <div className="device-banner-actions">
+            <button className="btn btn-secondary btn-sm" onClick={syncDevice} disabled={deviceSyncing}>
+              {deviceSyncing ? <RefreshCw size={14} className="spin" /> : <RefreshCw size={14} />} Sync
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/profile')}>
+              <Watch size={14} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="device-connected-banner no-device">
+          <div className="device-banner-info">
+            <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>No Device Connected</span>
+            <span className="text-muted" style={{ fontSize: '0.75rem' }}>Connect a device in your profile to sync health data</span>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={() => navigate('/profile')}>
+            Connect <ChevronRight size={14} />
           </button>
         </div>
-
-        <div className="integration-cards">
-          <div className="integration-card">
-            <div className="integration-card-head">
-              <div>
-                <div className="integration-name">WHOOP</div>
-                <div className={`integration-status ${whoopConnected ? 'connected' : 'disconnected'}`}>
-                  {whoopConnected ? 'Connected' : 'Not connected'}
-                </div>
-              </div>
-            </div>
-            <div className="integration-actions-row">
-              {!whoopConnected ? (
-                <button className="btn btn-primary btn-sm" onClick={() => window.location.href = '/api/whoop/auth'}>
-                  Connect <ChevronRight size={14} />
-                </button>
-              ) : (
-                <button className="btn btn-secondary btn-sm" onClick={syncWhoop} disabled={syncing}>
-                  {syncing ? <RefreshCw size={14} className="spin" /> : <RefreshCw size={14} />} Sync
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="integration-card">
-            <div className="integration-card-head">
-              <div>
-                <div className="integration-name">Oura Ring</div>
-                <div className={`integration-status ${ouraStatus.connected ? 'connected' : 'disconnected'}`}>
-                  {ouraStatus.connected ? 'Connected' : 'Not connected'}
-                </div>
-              </div>
-              {ouraStatus.connected && (
-                <span className={`badge ${ouraStatus.webhookConfigured ? 'badge-success' : 'badge-warning'}`}>
-                  {ouraStatus.webhookConfigured ? 'Webhook on' : 'Webhook off'}
-                </span>
-              )}
-            </div>
-            <div className="integration-actions-row">
-              {!ouraStatus.connected ? (
-                <button className="btn btn-primary btn-sm" onClick={() => connectIntegration('oura')}>
-                  Connect <ChevronRight size={14} />
-                </button>
-              ) : (
-                <>
-                  <button className="btn btn-secondary btn-sm" onClick={syncOura} disabled={syncingOura}>
-                    {syncingOura ? <RefreshCw size={14} className="spin" /> : <RefreshCw size={14} />} Sync
-                  </button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => disconnectIntegration('oura')}>
-                    Disconnect
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="integration-card">
-            <div className="integration-card-head">
-              <div>
-                <div className="integration-name">Garmin Watch</div>
-                <div className={`integration-status ${garminStatus.connected ? 'connected' : 'disconnected'}`}>
-                  {garminStatus.connected ? 'Connected' : 'Not connected'}
-                </div>
-              </div>
-              {garminStatus.connected && (
-                <span className={`badge ${garminStatus.webhookEnabled ? 'badge-success' : 'badge-warning'}`}>
-                  {garminStatus.webhookEnabled ? 'Webhook on' : 'Webhook off'}
-                </span>
-              )}
-            </div>
-            <div className="integration-actions-row">
-              {!garminStatus.connected ? (
-                <button className="btn btn-primary btn-sm" onClick={() => connectIntegration('garmin')}>
-                  Connect <ChevronRight size={14} />
-                </button>
-              ) : (
-                <>
-                  <button className="btn btn-secondary btn-sm" onClick={syncGarmin} disabled={syncingGarmin}>
-                    {syncingGarmin ? <RefreshCw size={14} className="spin" /> : <RefreshCw size={14} />} Sync
-                  </button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => disconnectIntegration('garmin')}>
-                    Disconnect
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Main Stats Grid */}
       <div className="grid grid-2">
-        {/* Calories Card */}
+        {/* Calories Intake Card */}
         <div className="stat-card">
           <div className="stat-header">
-            <div className="stat-icon orange"><Flame size={18} /></div>
+            <div className="stat-icon orange"><Utensils size={18} /></div>
             <span className={`badge ${calPercent > 100 ? 'badge-danger' : 'badge-success'}`}>
               {Math.round(calPercent)}%
             </span>
           </div>
           <div className="stat-value">{Math.round(totals.calories)}</div>
-          <div className="stat-label">Calories</div>
+          <div className="stat-label">Intake</div>
           <div className="progress-bar">
             <div className="progress-fill orange" style={{width: `${Math.min(calPercent, 100)}%`}}></div>
           </div>
           <div className="stat-footer">
-            {remaining.calories > 0 ? `${Math.round(remaining.calories)} left` : `${Math.abs(Math.round(remaining.calories))} over`}
+            {remaining.calories > 0 ? `${Math.round(remaining.calories)} cal left` : `${Math.abs(Math.round(remaining.calories))} over`}
+          </div>
+        </div>
+
+        {/* Calories Burned Card */}
+        <div className="stat-card">
+          <div className="stat-header">
+            <div className="stat-icon" style={{background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444'}}><Flame size={18} /></div>
+            {totalBurned > 0 && (
+              <span className="badge" style={{background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444'}}>
+                {burned_source || ''}
+              </span>
+            )}
+          </div>
+          <div className="stat-value">{totalBurned > 0 ? Math.round(totalBurned) : '--'}</div>
+          <div className="stat-label">Burned</div>
+          <div className="progress-bar">
+            <div className="progress-fill" style={{width: `${burnedPercent}%`, background: 'linear-gradient(90deg, #ef4444, #f97316)'}}></div>
+          </div>
+          <div className="stat-footer">
+            {totalBurned > 0 ? `Net: ${Math.round(totals.calories - totalBurned)} cal` : 'Connect device to track'}
           </div>
         </div>
 
@@ -727,16 +628,6 @@ function Dashboard() {
               <span><Activity size={12} style={{display: 'inline', verticalAlign: 'middle'}} /> {whoop.hrv || '--'}</span>
             </div>
           )}
-          {whoopConnected && (
-            <button 
-              className="btn btn-icon btn-ghost" 
-              onClick={syncWhoop} 
-              disabled={syncing}
-              style={{position: 'absolute', top: '0.75rem', right: '0.75rem', width: '28px', height: '28px', minHeight: '28px', padding: '0.25rem'}}
-            >
-              {syncing ? <RefreshCw size={14} className="spin" /> : <RefreshCw size={14} />}
-            </button>
-          )}
         </div>
       </div>
 
@@ -780,6 +671,47 @@ function Dashboard() {
           <span className="quick-action-label">Food Log</span>
         </button>
       </div>
+
+      {/* Active Challenges Widget */}
+      {activeChallenges.length > 0 && (
+        <div className="mt-2">
+          <div className="section-header">
+            <h3 className="section-title">
+              <Trophy size={18} /> Active Challenges
+            </h3>
+            <button className="btn btn-sm btn-ghost" onClick={() => navigate('/teams')}>
+              View All <ChevronRight size={14} />
+            </button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {activeChallenges.slice(0, 2).map(c => (
+              <div
+                key={c.id}
+                className="card"
+                onClick={() => navigate(`/teams/${c.team_id}/challenges/${c.id}`)}
+                style={{ cursor: 'pointer', padding: '1rem' }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <div>
+                    <h4 style={{ fontSize: '0.875rem', fontWeight: 600 }}>{c.name}</h4>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{c.team_name}</span>
+                  </div>
+                  <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
+                    #{c.my_rank}/{c.total_participants}
+                  </span>
+                </div>
+                <div className="progress-bar" style={{ height: '6px' }}>
+                  <div className="progress-fill purple" style={{ width: `${Math.min(c.today_percentage || 0, 100)}%` }}></div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.375rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                  <span>{Math.round(c.today_percentage || 0)}% today</span>
+                  <span>{Math.round(c.overall_percentage || 0)}% overall</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Sleep Card (if WHOOP data available) */}
       {whoop?.sleep_hours > 0 && (

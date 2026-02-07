@@ -13,7 +13,7 @@ services:
       POSTGRES_PASSWORD: health_tracker_secret
       POSTGRES_DB: health_tracker
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Backend handles migrations via db:migrate, no init.sql needed
@@ -73,7 +73,7 @@ services:
       KIMI_API_KEY: ${KIMI_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     ports:
-      - "3001:3001"
+      - "8000:3001"
     volumes:
       - ./backend/uploads:/app/uploads
     depends_on:
@@ -88,12 +88,14 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://10.0.0.116:8000
     container_name: health-tracker-web
     restart: unless-stopped
     ports:
-      - "3000:80"
+      - "8080:80"
     environment:
-      VITE_API_URL: http://localhost:3001
+      VITE_API_URL: http://10.0.0.116:8000
     depends_on:
       - backend
     networks:

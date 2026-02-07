@@ -289,8 +289,7 @@ RCT_EXPORT_METHOD(enableBackgroundDelivery:(NSString *)typeIdentifier
     case HKWorkoutActivityTypeWalking: return @"Walking";
     case HKWorkoutActivityTypeSwimming: return @"Swimming";
     case HKWorkoutActivityTypeYoga: return @"Yoga";
-    case HKWorkoutActivityTypeStrengthTraining: return @"Strength Training";
-    case HKWorkoutActivityTypeHIIT: return @"HIIT";
+    case HKWorkoutActivityTypeHighIntensityIntervalTraining: return @"HIIT";
     case HKWorkoutActivityTypeFunctionalStrengthTraining: return @"Functional Strength";
     case HKWorkoutActivityTypeTraditionalStrengthTraining: return @"Weight Training";
     case HKWorkoutActivityTypeCrossTraining: return @"Cross Training";

@@ -60,7 +60,7 @@ function Login() {
           <div className="login-logo">
             <Activity size={40} />
           </div>
-          <h1>Health Tracker</h1>
+          <h1>HealthSync</h1>
           <p>Track your nutrition, fitness, and wellness</p>
         </div>
 
@@ -202,30 +202,48 @@ function Login() {
         .login-page {
           min-height: 100vh;
           min-height: 100dvh;
-          background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+          background: var(--bg-primary);
           display: flex;
           align-items: center;
           justify-content: center;
           padding: 1rem;
           padding-top: calc(1rem + var(--safe-top));
           padding-bottom: calc(1rem + var(--safe-bottom));
+          position: relative;
+          overflow: hidden;
+        }
+
+        /* Mesh gradient background orbs */
+        .login-page::before {
+          content: '';
+          position: absolute;
+          top: -30%;
+          left: -20%;
+          width: 500px;
+          height: 500px;
+          background: radial-gradient(circle, rgba(14, 165, 233, 0.15) 0%, transparent 70%);
+          border-radius: 50%;
+          pointer-events: none;
+        }
+
+        .login-page::after {
+          content: '';
+          position: absolute;
+          bottom: -30%;
+          right: -20%;
+          width: 500px;
+          height: 500px;
+          background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, transparent 70%);
+          border-radius: 50%;
+          pointer-events: none;
         }
 
         .login-container {
           width: 100%;
           max-width: 420px;
           animation: fadeInUp 0.5s ease;
-        }
-
-        @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          position: relative;
+          z-index: 1;
         }
 
         .login-header {
@@ -236,20 +254,21 @@ function Login() {
         .login-logo {
           width: 72px;
           height: 72px;
-          background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+          background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
           border-radius: 20px;
           display: flex;
           align-items: center;
           justify-content: center;
           margin: 0 auto 1.5rem;
           color: white;
-          box-shadow: 0 8px 32px rgba(16, 185, 129, 0.3);
+          box-shadow: 0 8px 32px rgba(14, 165, 233, 0.3), 0 0 60px rgba(139, 92, 246, 0.15);
         }
 
         .login-header h1 {
+          font-family: var(--font-heading);
           font-size: 1.75rem;
           font-weight: 700;
-          background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%);
+          background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
           background-clip: text;
@@ -262,8 +281,10 @@ function Login() {
         }
 
         .login-card {
-          background: var(--bg-card);
-          border: 1px solid var(--border);
+          background: var(--glass-bg);
+          backdrop-filter: blur(var(--glass-blur));
+          -webkit-backdrop-filter: blur(var(--glass-blur));
+          border: 1px solid var(--glass-border);
           border-radius: var(--radius-xl);
           padding: 1.5rem;
           box-shadow: var(--shadow-lg);
@@ -284,6 +305,7 @@ function Login() {
           border: none;
           background: transparent;
           color: var(--text-muted);
+          font-family: var(--font-heading);
           font-size: 0.875rem;
           font-weight: 600;
           cursor: pointer;
@@ -296,9 +318,9 @@ function Login() {
         }
 
         .login-tab.active {
-          background: var(--bg-card);
-          color: var(--accent);
-          box-shadow: var(--shadow-sm);
+          background: linear-gradient(135deg, var(--primary), var(--secondary));
+          color: white;
+          box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
         }
 
         .login-alert {
@@ -369,7 +391,7 @@ function Login() {
           text-align: right;
           margin-top: 0.5rem;
           font-size: 0.8rem;
-          color: var(--accent);
+          color: var(--primary);
           text-decoration: none;
         }
 
@@ -406,12 +428,12 @@ function Login() {
         }
 
         .checkbox-label input:checked + .checkbox-custom {
-          background: var(--accent);
-          border-color: var(--accent);
+          background: linear-gradient(135deg, var(--primary), var(--secondary));
+          border-color: var(--primary);
         }
 
         .checkbox-label input:checked + .checkbox-custom::after {
-          content: '✓';
+          content: '\\2713';
           color: white;
           font-size: 12px;
           font-weight: bold;
@@ -424,10 +446,6 @@ function Login() {
           border-top-color: white;
           border-radius: 50%;
           animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-          to { transform: rotate(360deg); }
         }
 
         .login-divider {
@@ -485,11 +503,11 @@ function Login() {
           .login-container {
             max-width: 100%;
           }
-          
+
           .login-card {
             padding: 1.25rem;
           }
-          
+
           .login-header h1 {
             font-size: 1.5rem;
           }

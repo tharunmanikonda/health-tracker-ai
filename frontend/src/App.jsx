@@ -5,8 +5,8 @@ import {
   ScanLine, 
   TrendingUp,
   LogOut,
-  User,
-  Bot
+  Bot,
+  Activity
 } from 'lucide-react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -35,7 +35,12 @@ function AppContent() {
       {/* Fixed Header */}
       <header className="header">
         <div className="header-content">
-          <h1>💪 Health Tracker</h1>
+          <div className="header-brand">
+            <div className="header-logo" aria-hidden="true">
+              <Activity size={16} />
+            </div>
+            <h1>Health Tracker</h1>
+          </div>
           <div className="header-actions">
             <span className="user-greeting">Hi, {user?.name || 'User'}</span>
             <button 

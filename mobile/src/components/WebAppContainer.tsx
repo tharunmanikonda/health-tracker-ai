@@ -249,8 +249,12 @@ export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage}) => 
       )}
       {loading && (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.loadingText}>Loading Health Tracker...</Text>
+          <View style={styles.loadingLogo}>
+            <Text style={styles.loadingLogoText}>♥</Text>
+          </View>
+          <Text style={styles.loadingTitle}>Health Tracker</Text>
+          <ActivityIndicator size="large" color="#10B981" />
+          <Text style={styles.loadingText}>Syncing your wellness dashboard...</Text>
         </View>
       )}
     </View>
@@ -260,7 +264,7 @@ export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage}) => 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#0f172a',
   },
   webview: {
     flex: 1,
@@ -269,12 +273,33 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#0f172a',
+  },
+  loadingLogo: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    backgroundColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingLogoText: {
+    color: '#f8fafc',
+    fontSize: 34,
+    fontWeight: '700',
+    lineHeight: 36,
+  },
+  loadingTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#10B981',
+    letterSpacing: 0.3,
+    marginBottom: 4,
   },
   loadingText: {
-    marginTop: 12,
     fontSize: 16,
-    color: '#666',
+    color: '#94a3b8',
+    marginTop: 4,
   },
   errorContainer: {
     flex: 1,
@@ -285,18 +310,18 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#d32f2f',
+    color: '#ef4444',
     marginBottom: 8,
   },
   errorSubtext: {
     fontSize: 14,
-    color: '#666',
+    color: '#94a3b8',
     textAlign: 'center',
     marginBottom: 16,
   },
   retryText: {
     fontSize: 14,
-    color: '#007AFF',
+    color: '#10B981',
   },
 });
 

@@ -141,6 +141,24 @@ body {
   padding: 0 0.5rem;
 }
 
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.header-logo {
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+  color: #f8fafc;
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.25);
+}
+
 .header h1 {
   font-size: 1.25rem;
   font-weight: 700;

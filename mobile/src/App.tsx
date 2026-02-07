@@ -1,6 +1,6 @@
 /**
  * Main App Component
- * Tharun Health Tracker Mobile App
+ * Health Tracker Mobile App
  */
 
 import React, {useEffect, useState, useCallback} from 'react';
@@ -177,7 +177,7 @@ const App: React.FC = () => {
         <View style={styles.permissionCard}>
           <Text style={styles.permissionTitle}>Enable Health Access</Text>
           <Text style={styles.permissionText}>
-            Tharun Health Tracker needs access to your health data to provide insights and sync with your dashboard.
+            Health Tracker needs access to your health data to provide insights and sync with your dashboard.
           </Text>
           <Text style={styles.permissionSubtext}>
             We can access: Steps, Heart Rate, Sleep, Workouts, and Calories
@@ -235,7 +235,7 @@ const App: React.FC = () => {
   if (!isInitialized) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle="light-content" />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading...</Text>
         </View>
@@ -264,7 +264,7 @@ const App: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#0f172a',
   },
   webviewContainer: {
     flex: 1,
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 18,
-    color: '#666',
+    color: '#94a3b8',
   },
   statusBar: {
     flexDirection: 'row',

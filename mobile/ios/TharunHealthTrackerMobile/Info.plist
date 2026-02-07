@@ -10,7 +10,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>$(PRODUCT_NAME)</string>
+	<string>Health Tracker</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -37,9 +37,9 @@
 		<true/>
 	</dict>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Tharun Health Tracker needs access to your health data to provide insights and sync with your dashboard. This includes steps, heart rate, sleep, workouts, and calories.</string>
+	<string>Health Tracker needs access to your health data to provide insights and sync with your dashboard. This includes steps, heart rate, sleep, workouts, and calories.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>Tharun Health Tracker needs permission to read your health data for tracking and analysis.</string>
+	<string>Health Tracker needs permission to read your health data for tracking and analysis.</string>
 	<key>NSPrivacyManifestFilePath</key>
 	<string>PrivacyInfo.xcprivacy</string>
 	<key>RCTDevMenu</key>

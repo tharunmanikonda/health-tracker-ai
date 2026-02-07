@@ -220,7 +220,7 @@ function Dashboard() {
 
   if (!data) return null
 
-  const { totals, goals, remaining, whoop, workouts, food_logs, calories_burned, burned_source } = data
+  const { totals, goals, remaining, whoop, fitbit, fitbit_derived, workouts, food_logs, calories_burned, burned_source } = data
   const calPercent = Math.min((totals.calories / goals.daily_calorie_goal) * 100, 100)
   const proteinPercent = Math.min((totals.protein / goals.daily_protein_goal) * 100, 100)
 
@@ -229,6 +229,11 @@ function Dashboard() {
   const burnedPercent = burnedGoal > 0 ? Math.min((totalBurned / burnedGoal) * 100, 100) : 0
   const waterGoal = 2500
   const waterPercent = Math.min((waterAmount / waterGoal) * 100, 100)
+  const recoveryScore = whoop?.recovery_score ?? fitbit_derived?.readiness_score
+  const recoveryRestingHr = whoop?.resting_hr ?? fitbit_derived?.resting_heart_rate
+  const recoveryHrv = whoop?.hrv ?? fitbit_derived?.hrv
+  const sleepHours = whoop?.sleep_hours ?? fitbit_derived?.sleep_hours
+  const sleepScore = whoop?.sleep_score ?? fitbit_derived?.sleep_efficiency
 
   const getRecoveryColor = (score) => {
     if (!score) return 'var(--text-muted)'
@@ -606,26 +611,26 @@ function Dashboard() {
         {/* Recovery Card */}
         <div className="stat-card">
           <div className="stat-header">
-            <div className="stat-icon" style={{ background: `${getRecoveryColor(whoop?.recovery_score)}20`, color: getRecoveryColor(whoop?.recovery_score) }}>
+            <div className="stat-icon" style={{ background: `${getRecoveryColor(recoveryScore)}20`, color: getRecoveryColor(recoveryScore) }}>
               <Battery size={18} />
             </div>
-            {whoop?.recovery_score && (
+            {recoveryScore && (
               <span className="badge" style={{ 
-                background: `${getRecoveryColor(whoop.recovery_score)}20`,
-                color: getRecoveryColor(whoop.recovery_score)
+                background: `${getRecoveryColor(recoveryScore)}20`,
+                color: getRecoveryColor(recoveryScore)
               }}>
-                {whoop.recovery_score >= 67 ? 'Green' : whoop.recovery_score >= 33 ? 'Yellow' : 'Red'}
+                {recoveryScore >= 67 ? 'Green' : recoveryScore >= 33 ? 'Yellow' : 'Red'}
               </span>
             )}
           </div>
-          <div className="stat-value" style={{ color: getRecoveryColor(whoop?.recovery_score) }}>
-            {whoop?.recovery_score || '--'}<span className="unit">%</span>
+          <div className="stat-value" style={{ color: getRecoveryColor(recoveryScore) }}>
+            {recoveryScore || '--'}<span className="unit">%</span>
           </div>
-          <div className="stat-label">Recovery</div>
-          {whoop && (
+          <div className="stat-label">{whoop?.recovery_score ? 'Recovery' : 'Readiness (Derived)'}</div>
+          {(recoveryRestingHr || recoveryHrv) && (
             <div className="stat-footer" style={{display: 'flex', gap: '0.75rem'}}>
-              <span><Heart size={12} style={{display: 'inline', verticalAlign: 'middle'}} /> {whoop.resting_hr || '--'}</span>
-              <span><Activity size={12} style={{display: 'inline', verticalAlign: 'middle'}} /> {whoop.hrv || '--'}</span>
+              <span><Heart size={12} style={{display: 'inline', verticalAlign: 'middle'}} /> {recoveryRestingHr || '--'}</span>
+              <span><Activity size={12} style={{display: 'inline', verticalAlign: 'middle'}} /> {recoveryHrv || '--'}</span>
             </div>
           )}
         </div>
@@ -713,22 +718,28 @@ function Dashboard() {
         </div>
       )}
 
-      {/* Sleep Card (if WHOOP data available) */}
-      {whoop?.sleep_hours > 0 && (
+      {/* Sleep Card (WHOOP or Fitbit-derived fallback) */}
+      {sleepHours > 0 && (
         <div className="card mt-2">
           <div className="section-header">
             <h3 className="section-title">
               <Moon size={18} /> Sleep
             </h3>
-            {whoop?.sleep_score && (
-              <span className="badge badge-info">{whoop.sleep_score}%</span>
+            {sleepScore && (
+              <span className="badge badge-info">{Math.round(sleepScore)}%</span>
             )}
           </div>
-          <div className="stat-value">{formatHours(whoop.sleep_hours)}</div>
-          {whoop?.sleep_cycles && (
+          <div className="stat-value">{formatHours(sleepHours)}</div>
+          {whoop?.sleep_cycles ? (
             <div className="stat-footer" style={{display: 'flex', gap: '1rem', marginTop: '0.5rem'}}>
               <span>{whoop.sleep_cycles} cycles</span>
               <span>{whoop.disturbances} disturbances</span>
+            </div>
+          ) : (
+            <div className="stat-footer" style={{display: 'flex', gap: '1rem', marginTop: '0.5rem'}}>
+              {fitbit_derived?.sleep_debt_hours != null && <span>Debt: {fitbit_derived.sleep_debt_hours}h</span>}
+              {fitbit_derived?.deep_rem_ratio_pct != null && <span>Deep+REM: {fitbit_derived.deep_rem_ratio_pct}%</span>}
+              {fitbit?.last_metric_at && <span>Updated: {new Date(fitbit.last_metric_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
             </div>
           )}
         </div>

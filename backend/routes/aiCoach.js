@@ -2,6 +2,18 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 
+function safeJson(value) {
+  if (value == null) return null;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  return value;
+}
+
 // AI Coach Chat Routes
 
 // Get chat history
@@ -24,7 +36,7 @@ router.get('/history', async (req, res) => {
         role: m.role,
         content: m.content,
         timestamp: m.created_at,
-        metadata: m.metadata ? JSON.parse(m.metadata) : null
+        metadata: safeJson(m.metadata)
       }))
     });
   } catch (err) {
@@ -178,7 +190,7 @@ async function getHealthContext(userId) {
       },
       fitbitSleep: fitbitSleep ? {
         minutesAsleep: fitbitSleep.value,
-        ...(fitbitSleep.metadata ? JSON.parse(fitbitSleep.metadata) : {})
+        ...(safeJson(fitbitSleep.metadata) || {})
       } : null,
       goals: {
         calories: userGoals?.daily_calorie_goal || 2500,

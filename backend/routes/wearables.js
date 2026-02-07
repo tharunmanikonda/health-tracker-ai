@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const crypto = require('crypto');
 const db = require('../database');
 const fitbitService = require('../services/fitbit');
 
@@ -11,19 +12,75 @@ const fitbitService = require('../services/fitbit');
 const FITBIT_CLIENT_ID = process.env.FITBIT_CLIENT_ID;
 const FITBIT_CLIENT_SECRET = process.env.FITBIT_CLIENT_SECRET;
 const FITBIT_REDIRECT_URI = process.env.FITBIT_REDIRECT_URI || 'http://localhost:3001/api/wearables/fitbit/callback';
+const FITBIT_STATE_SECRET = process.env.FITBIT_STATE_SECRET || process.env.JWT_SECRET || FITBIT_CLIENT_SECRET || 'fitbit-state-secret';
+const FITBIT_STATE_MAX_AGE_MS = 15 * 60 * 1000;
+
+function safeJson(value) {
+  if (value == null) return null;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  return value;
+}
+
+function signFitbitState(payloadBase64) {
+  return crypto.createHmac('sha256', FITBIT_STATE_SECRET).update(payloadBase64).digest('hex');
+}
+
+function buildFitbitState(userId) {
+  const payload = {
+    userId,
+    iat: Date.now(),
+    nonce: crypto.randomBytes(12).toString('hex'),
+  };
+  const payloadBase64 = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  const signature = signFitbitState(payloadBase64);
+  return `${payloadBase64}.${signature}`;
+}
+
+function decodeFitbitState(state) {
+  if (!state || typeof state !== 'string') return null;
+  const [payloadBase64, signature] = state.split('.');
+  if (!payloadBase64 || !signature) return null;
+
+  const expectedSignature = signFitbitState(payloadBase64);
+  if (signature.length !== expectedSignature.length) return null;
+
+  let isValid = false;
+  try {
+    isValid = crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
+  } catch {
+    return null;
+  }
+  if (!isValid) return null;
+
+  try {
+    const payload = JSON.parse(Buffer.from(payloadBase64, 'base64url').toString('utf8'));
+    if (!payload?.userId || !payload?.iat) return null;
+    if ((Date.now() - payload.iat) > FITBIT_STATE_MAX_AGE_MS) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
 
 // Get Fitbit auth URL
 router.get('/fitbit/auth-url', async (req, res) => {
   try {
     const userId = (req.user.userId || req.user.id);
     const scope = 'activity heartrate sleep weight profile oxygen_saturation respiratory_rate temperature';
+    const state = buildFitbitState(userId);
 
     const params = new URLSearchParams({
       client_id: FITBIT_CLIENT_ID,
       response_type: 'code',
       scope: scope,
       redirect_uri: FITBIT_REDIRECT_URI,
-      state: userId.toString(),
+      state,
     });
 
     res.json({
@@ -39,10 +96,15 @@ router.get('/fitbit/auth-url', async (req, res) => {
 router.get('/fitbit/callback', async (req, res) => {
   try {
     const { code, state, error } = req.query;
-    const userId = parseInt(state);
+    const decodedState = decodeFitbitState(state);
+    const userId = decodedState?.userId ? Number.parseInt(String(decodedState.userId), 10) : null;
 
     if (error) {
       return res.redirect('/settings?fitbit=error&message=' + encodeURIComponent(error));
+    }
+
+    if (!code || !userId) {
+      return res.redirect('/?fitbit=error&message=invalid_state');
     }
 
     // Exchange code for tokens
@@ -86,7 +148,7 @@ router.get('/fitbit/callback', async (req, res) => {
 
     // Trigger comprehensive initial sync via the service
     try {
-      await fitbitService.syncLatestData(userId);
+      await fitbitService.syncLatestData(userId, { mode: 'initial', force: true });
     } catch (syncErr) {
       console.error('[Fitbit] Initial sync failed (non-blocking):', syncErr.message);
     }
@@ -112,7 +174,7 @@ router.post('/fitbit/sync', async (req, res) => {
       return res.status(401).json({ error: 'Fitbit not connected' });
     }
 
-    const result = await fitbitService.syncLatestData(userId);
+    const result = await fitbitService.syncLatestData(userId, { mode: 'manual', force: true });
     res.json({ success: true, message: 'Fitbit sync completed', data: result.data });
   } catch (err) {
     console.error('Fitbit manual sync error:', err);
@@ -124,17 +186,25 @@ router.post('/fitbit/sync', async (req, res) => {
 router.get('/fitbit/status', async (req, res) => {
   try {
     const userId = (req.user.userId || req.user.id);
-    const connection = await db.get(`
+    const [connection, metricFreshness] = await Promise.all([
+      db.get(`
       SELECT provider_user_id, connected_at, updated_at, expires_at
       FROM wearable_connections
       WHERE user_id = $1 AND provider = 'fitbit'
-    `, [userId]);
+    `, [userId]),
+      db.get(`
+        SELECT MAX(created_at) AS last_metric_at
+        FROM mobile_health_metrics
+        WHERE user_id = $1 AND source = 'fitbit'
+      `, [userId]),
+    ]);
 
     res.json({
       connected: !!connection,
       providerUserId: connection?.provider_user_id,
       connectedAt: connection?.connected_at,
-      lastSync: connection?.updated_at
+      lastSync: connection?.updated_at,
+      lastMetricAt: metricFreshness?.last_metric_at || null
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to get status' });
@@ -491,7 +561,7 @@ router.get('/latest-data', async (req, res) => {
       grouped[m.source][m.metric_type] = {
         value: m.value,
         unit: m.unit,
-        metadata: m.metadata ? JSON.parse(m.metadata) : null,
+        metadata: safeJson(m.metadata),
         updatedAt: m.created_at
       };
     }

@@ -192,7 +192,9 @@ export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage, onSc
         case 'sync_request':
           // Web app requested a health data sync
           try {
-            const data = await healthSyncService.syncHealthData(message.payload?.days || 7);
+            const days = message.payload?.days || 1;
+            const data = await healthSyncService.syncHealthData(days, {preferIncremental: days <= 1});
+            await backendSyncService.syncToBackend();
             sendMessageToWebView({
               type: 'health_data',
               payload: data,

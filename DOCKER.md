@@ -44,6 +44,10 @@ WHOOP_CLIENT_SECRET=your_whoop_secret
 
 FITBIT_CLIENT_ID=your_fitbit_id
 FITBIT_CLIENT_SECRET=your_fitbit_secret
+FITBIT_REDIRECT_URI=http://localhost:3001/api/wearables/fitbit/callback
+FITBIT_VERIFY_CODE=your_fitbit_verify_code
+# Optional state secret override
+# FITBIT_STATE_SECRET=your_fitbit_state_secret
 
 GOOGLE_CLIENT_ID=your_google_id
 GOOGLE_CLIENT_SECRET=your_google_secret

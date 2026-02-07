@@ -126,7 +126,7 @@ cron.schedule('*/15 * * * *', async () => {
 cron.schedule('*/15 * * * *', async () => {
   console.log('[CRON] Syncing Fitbit data...');
   try {
-    await fitbitService.syncAllUsers();
+    await fitbitService.syncAllUsers({ mode: 'cron' });
     console.log('[CRON] Fitbit sync complete');
   } catch (err) {
     console.error('[CRON] Fitbit sync failed:', err.message);

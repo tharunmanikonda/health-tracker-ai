@@ -3,7 +3,7 @@
  * Health Tracker Mobile App
  */
 
-import React, {useEffect, useState, useCallback} from 'react';
+import React, {useEffect, useState, useCallback, useRef} from 'react';
 import {
   StyleSheet,
   View,
@@ -12,9 +12,9 @@ import {
   Alert,
   StatusBar,
   Platform,
+  AppState,
   useColorScheme,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {WebAppContainer} from './components/WebAppContainer';
 import {NativeBarcodeScanner} from './components/NativeBarcodeScanner';
 import {healthSyncService} from './services/healthSync';
@@ -23,8 +23,6 @@ import {backgroundTaskService, headlessTask} from './services/backgroundTask';
 import {webhookService} from './services/webhook';
 import {backendSyncService} from './services/backendSync';
 import {getDeviceInfo} from './utils/helpers';
-import {STORAGE_KEYS} from './utils/constants';
-import type {HealthPermissions} from './types';
 
 // Register Android headless task
 if (Platform.OS === 'android') {
@@ -42,6 +40,7 @@ const App: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [webViewNavigateTo, setWebViewNavigateTo] = useState<string | null>(null);
+  const lastForegroundRefreshRef = useRef(0);
   const [todaySummary, setTodaySummary] = useState({
     steps: 0,
     activeCalories: 0,
@@ -53,6 +52,23 @@ const App: React.FC = () => {
   useEffect(() => {
     initializeApp();
   }, []);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') return;
+      if (!hasPermissions || isSyncing) return;
+
+      const now = Date.now();
+      if (now - lastForegroundRefreshRef.current < 60 * 1000) return;
+      lastForegroundRefreshRef.current = now;
+
+      void refreshOnForeground();
+    });
+
+    return () => {
+      sub.remove();
+    };
+  }, [hasPermissions, isSyncing]);
 
   const initializeApp = async () => {
     try {
@@ -142,13 +158,26 @@ const App: React.FC = () => {
     }
   };
 
+  // Foreground refresh to keep data fresh when user re-opens app
+  async function refreshOnForeground() {
+    try {
+      console.log('[App] Foreground refresh...');
+      await healthSyncService.syncHealthData(1, { preferIncremental: true });
+      await backendSyncService.syncToBackend();
+      const summary = await healthSyncService.getTodaySummary();
+      setTodaySummary(summary);
+    } catch (error) {
+      console.warn('[App] Foreground refresh failed:', error);
+    }
+  }
+
   // Manual sync handler
   const handleManualSync = useCallback(async () => {
     if (isSyncing) return;
     
     try {
       setIsSyncing(true);
-      const data = await healthSyncService.syncHealthData(1);
+      const data = await healthSyncService.syncHealthData(1, { preferIncremental: true });
       await backendSyncService.syncToBackend();
       
       const summary = await healthSyncService.getTodaySummary();

@@ -55,6 +55,7 @@ export const HEALTH_UNITS = {
 export const STORAGE_KEYS = {
   AUTH_TOKEN: '@auth_token',
   LAST_SYNC_TIME: '@last_sync_time',
+  HEALTH_PERMISSIONS_GRANTED: '@health_permissions_granted',
   APP_SETTINGS: '@app_settings',
   PENDING_HEALTH_DATA: '@pending_health_data',
   DEVICE_ID: '@device_id',

@@ -4,7 +4,7 @@ const whoopService = require('../services/whoop');
 
 // Get user ID from authenticated request
 function getUserId(req) {
-  return req.user?.id;
+  return req.user?.userId || req.user?.id || 1;
 }
 
 // OAuth: Start authorization
@@ -61,7 +61,13 @@ router.get('/profile', async (req, res) => {
 // Sync WHOOP data manually
 router.post('/sync', async (req, res) => {
   try {
-    const result = await whoopService.syncLatestData();
+    const userId = getUserId(req);
+    const requestedDays = Number.parseInt(String(req.body?.days ?? ''), 10);
+    const lookbackDays = Number.isFinite(requestedDays) && requestedDays > 0
+      ? Math.min(requestedDays, 180)
+      : 30;
+
+    const result = await whoopService.syncLatestData({ userId, lookbackDays });
     res.json(result);
   } catch (error) {
     res.status(500).json({ 
@@ -74,7 +80,8 @@ router.post('/sync', async (req, res) => {
 // Get WHOOP metrics for today
 router.get('/today', async (req, res) => {
   try {
-    const metrics = await whoopService.getTodayMetrics();
+    const userId = getUserId(req);
+    const metrics = await whoopService.getTodayMetrics(userId);
     res.json(metrics || { message: 'No data available for today' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -88,16 +95,19 @@ router.get('/metrics', async (req, res) => {
     const { start, end } = req.query;
     const db = require('../database');
     
-    let query = 'SELECT * FROM whoop_metrics WHERE user_id = ?';
+    let query = 'SELECT * FROM whoop_metrics WHERE user_id = $1';
     const params = [userId];
+    let nextParam = 2;
     
     if (start) {
-      query += ' AND date >= ?';
+      query += ` AND date >= $${nextParam}`;
       params.push(start);
+      nextParam += 1;
     }
     if (end) {
-      query += ' AND date <= ?';
+      query += ` AND date <= $${nextParam}`;
       params.push(end);
+      nextParam += 1;
     }
     
     query += ' ORDER BY date DESC';

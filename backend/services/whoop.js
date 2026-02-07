@@ -5,6 +5,35 @@ const WHOOP_AUTH_URL = 'https://api.prod.whoop.com/oauth/oauth2/auth';
 const WHOOP_TOKEN_URL = 'https://api.prod.whoop.com/oauth/oauth2/token';
 const WHOOP_API_BASE = 'https://api.prod.whoop.com/developer';
 const REDIRECT_URI = process.env.WHOOP_REDIRECT_URI || 'http://localhost:3001/api/whoop/callback';
+const MAX_PAGE_SIZE = 25;
+const DEFAULT_SYNC_LOOKBACK_DAYS = Number.parseInt(process.env.WHOOP_SYNC_LOOKBACK_DAYS || '7', 10);
+const WHOOP_SCOPES = [
+  'read:recovery',
+  'read:cycles',
+  'read:workout',
+  'read:sleep',
+  'read:profile',
+  'read:body_measurement',
+  'offline',
+];
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function parsePositiveInt(value, fallback) {
+  const parsed = Number.parseInt(String(value), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
+function msToHours(ms) {
+  return ms ? ms / 3600000 : null;
+}
+
+function msToMins(ms) {
+  return ms ? Math.round(ms / 60000) : 0;
+}
 
 class WhoopService {
   constructor() {
@@ -53,9 +82,9 @@ class WhoopService {
     params.append('client_id', this.clientId);
     params.append('redirect_uri', REDIRECT_URI);
     params.append('response_type', 'code');
-    params.append('scope', 'read:recovery read:cycles read:workout read:sleep read:profile read:body_measurement read:strain offline');
+    params.append('scope', WHOOP_SCOPES.join(' '));
     params.append('state', 'random_state_string');
-    
+
     return `${WHOOP_AUTH_URL}?${params.toString()}`;
   }
 
@@ -74,10 +103,10 @@ class WhoopService {
     this.accessToken = response.data.access_token;
     this.refreshToken = response.data.refresh_token;
     this.tokenExpiry = Date.now() + (response.data.expires_in * 1000);
-    
+
     await this.saveTokensToDb();
     console.log('[WHOOP] Tokens obtained and saved');
-    
+
     return response.data;
   }
 
@@ -99,10 +128,10 @@ class WhoopService {
     this.accessToken = response.data.access_token;
     this.refreshToken = response.data.refresh_token || this.refreshToken;
     this.tokenExpiry = Date.now() + (response.data.expires_in * 1000);
-    
+
     await this.saveTokensToDb();
     console.log('[WHOOP] Token refreshed');
-    
+
     return this.accessToken;
   }
 
@@ -110,7 +139,7 @@ class WhoopService {
     if (!this.accessToken) {
       await this.loadTokensFromDb();
     }
-    
+
     if (!this.accessToken) {
       throw new Error('Not authenticated with WHOOP. Visit /api/whoop/auth to connect.');
     }
@@ -125,126 +154,194 @@ class WhoopService {
   async getHeaders() {
     const token = await this.getValidAccessToken();
     return {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json'
     };
   }
 
+  async requestWithRetry(config, maxRetries = 5) {
+    let attempt = 0;
+
+    while (true) {
+      try {
+        return await axios(config);
+      } catch (err) {
+        const status = err.response?.status;
+        const retryable = status === 429 || (status >= 500 && status < 600);
+
+        if (!retryable || attempt >= maxRetries) {
+          throw err;
+        }
+
+        const retryAfterHeader = err.response?.headers?.['retry-after'];
+        const retryAfterMs = retryAfterHeader ? Math.round(Number.parseFloat(retryAfterHeader) * 1000) : 0;
+        const backoffMs = Math.max(retryAfterMs, 500 * (2 ** attempt));
+        const jitterMs = Math.floor(Math.random() * 250);
+        const waitMs = backoffMs + jitterMs;
+
+        console.warn(`[WHOOP] Request failed with status ${status}. Retrying in ${waitMs}ms (${attempt + 1}/${maxRetries})`);
+        await sleep(waitMs);
+        attempt += 1;
+      }
+    }
+  }
+
+  async fetchPaginatedCollection(path, options = {}) {
+    const headers = await this.getHeaders();
+    const startDate = options.startDate;
+    const endDate = options.endDate;
+    const limit = Math.min(parsePositiveInt(options.limit, MAX_PAGE_SIZE), MAX_PAGE_SIZE);
+
+    const records = [];
+    let nextToken = null;
+    let page = 0;
+
+    do {
+      const params = { limit };
+      if (startDate) params.start = startDate;
+      if (endDate) params.end = endDate;
+      if (nextToken) params.nextToken = nextToken;
+
+      const response = await this.requestWithRetry({
+        method: 'get',
+        url: `${WHOOP_API_BASE}${path}`,
+        headers,
+        params,
+      });
+
+      const payload = response.data || {};
+      if (Array.isArray(payload.records) && payload.records.length > 0) {
+        records.push(...payload.records);
+      }
+
+      nextToken = payload.next_token || payload.nextToken || null;
+      page += 1;
+    } while (nextToken);
+
+    console.log(`[WHOOP] Retrieved ${records.length} records from ${path} in ${page} page(s)`);
+    return { records };
+  }
+
   async getProfile() {
     const headers = await this.getHeaders();
-    const response = await axios.get(`${WHOOP_API_BASE}/v2/user/profile/basic`, { headers });
+    const response = await this.requestWithRetry({
+      method: 'get',
+      url: `${WHOOP_API_BASE}/v2/user/profile/basic`,
+      headers,
+    });
+    return response.data;
+  }
+
+  async getBodyMeasurement() {
+    const headers = await this.getHeaders();
+    const response = await this.requestWithRetry({
+      method: 'get',
+      url: `${WHOOP_API_BASE}/v2/user/measurement/body`,
+      headers,
+    });
     return response.data;
   }
 
   // Recovery data
   async getRecovery(startDate, endDate) {
-    const headers = await this.getHeaders();
-    let url = `${WHOOP_API_BASE}/v2/recovery`;
-    const params = new URLSearchParams();
-    if (startDate) params.append('start', startDate);
-    if (endDate) params.append('end', endDate);
-    params.append('limit', '25');
-    if (params.toString()) url += '?' + params.toString();
-    
-    const response = await axios.get(url, { headers });
-    return response.data;
+    return this.fetchPaginatedCollection('/v2/recovery', { startDate, endDate, limit: MAX_PAGE_SIZE });
   }
 
   // Sleep data
   async getSleep(startDate, endDate) {
-    const headers = await this.getHeaders();
-    let url = `${WHOOP_API_BASE}/v2/activity/sleep`;
-    const params = new URLSearchParams();
-    if (startDate) params.append('start', startDate);
-    if (endDate) params.append('end', endDate);
-    params.append('limit', '25');
-    if (params.toString()) url += '?' + params.toString();
-    
-    const response = await axios.get(url, { headers });
-    return response.data;
+    return this.fetchPaginatedCollection('/v2/activity/sleep', { startDate, endDate, limit: MAX_PAGE_SIZE });
   }
 
   // Cycles (daily strain)
   async getCycles(startDate, endDate) {
-    const headers = await this.getHeaders();
-    let url = `${WHOOP_API_BASE}/v2/cycle`;
-    const params = new URLSearchParams();
-    if (startDate) params.append('start', startDate);
-    if (endDate) params.append('end', endDate);
-    params.append('limit', '25');
-    if (params.toString()) url += '?' + params.toString();
-    
-    const response = await axios.get(url, { headers });
-    return response.data;
+    return this.fetchPaginatedCollection('/v2/cycle', { startDate, endDate, limit: MAX_PAGE_SIZE });
   }
 
   // Workouts
   async getWorkouts(startDate, endDate) {
-    const headers = await this.getHeaders();
-    let url = `${WHOOP_API_BASE}/v2/workout`;
-    const params = new URLSearchParams();
-    if (startDate) params.append('start', startDate);
-    if (endDate) params.append('end', endDate);
-    params.append('limit', '25');
-    if (params.toString()) url += '?' + params.toString();
-    
-    const response = await axios.get(url, { headers });
-    return response.data;
+    return this.fetchPaginatedCollection('/v2/activity/workout', { startDate, endDate, limit: MAX_PAGE_SIZE });
   }
 
-  // COMPREHENSIVE SYNC - ALL DATA
-  async syncLatestData() {
-    const today = new Date().toISOString();
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  // COMPREHENSIVE SYNC - WHOOP AVAILABLE DATA
+  async syncLatestData(options = {}) {
+    const userId = parsePositiveInt(options.userId, 1);
+    const lookbackDays = Math.min(parsePositiveInt(options.lookbackDays, DEFAULT_SYNC_LOOKBACK_DAYS), 180);
+    const endDate = options.endDate || new Date().toISOString();
+    const startDate = options.startDate || new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
 
-    console.log('[WHOOP] 🔄 SYNCING ALL DATA from', sevenDaysAgo.split('T')[0], 'to', today.split('T')[0]);
+    console.log('[WHOOP] 🔄 SYNCING DATA for user', userId, 'from', startDate.split('T')[0], 'to', endDate.split('T')[0]);
 
     const results = {
       recovery: 0,
       sleep: 0,
       cycles: 0,
       workouts: 0,
+      bodyMeasurement: false,
       errors: []
     };
 
     try {
+      // Optional body measurement (single object endpoint)
+      try {
+        const bodyMeasurement = await this.getBodyMeasurement();
+        if (bodyMeasurement) {
+          results.bodyMeasurement = true;
+          await db.run(
+            `INSERT INTO ai_feed_queue (user_id, source_table, source_id, data_type, data_json)
+             VALUES ($1, 'whoop_profile', $2, 'body_measurement', $3)`,
+            [
+              userId,
+              1,
+              JSON.stringify({
+                ...bodyMeasurement,
+                source: 'whoop',
+                timestamp: new Date().toISOString(),
+              }),
+            ]
+          );
+        }
+      } catch (err) {
+        console.log('[WHOOP]   ⚠ Body measurement skipped:', err.message);
+        results.errors.push(`body_measurement: ${err.message}`);
+      }
+
       // 1. RECOVERY DATA
       console.log('[WHOOP] 📊 Fetching recovery...');
-      const recoveryData = await this.getRecovery(sevenDaysAgo, today);
+      const recoveryData = await this.getRecovery(startDate, endDate);
       results.recovery = recoveryData.records?.length || 0;
       console.log(`[WHOOP]   ✓ ${results.recovery} recovery records`);
-      
+
       if (recoveryData.records?.length > 0) {
         for (const record of recoveryData.records) {
           const date = record.created_at ? record.created_at.split('T')[0] : new Date().toISOString().split('T')[0];
           const score = record.score || {};
-          
+
           await db.run(`
             INSERT INTO whoop_metrics (
-              date, recovery_score, resting_hr, hrv, spo2, skin_temp
-            ) VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT(date) DO UPDATE SET
+              user_id, date, recovery_score, resting_hr, hrv, spo2, skin_temp
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT(user_id, date) DO UPDATE SET
               recovery_score = EXCLUDED.recovery_score,
               resting_hr = EXCLUDED.resting_hr,
               hrv = EXCLUDED.hrv,
               spo2 = EXCLUDED.spo2,
               skin_temp = EXCLUDED.skin_temp
           `, [
-            date, 
-            score.recovery_score || null, 
-            score.resting_heart_rate || null, 
+            userId,
+            date,
+            score.recovery_score || null,
+            score.resting_heart_rate || null,
             score.hrv_rmssd_milli ? Math.round(score.hrv_rmssd_milli) : null,
             score.spo2_percentage ? Math.round(score.spo2_percentage) : null,
             score.skin_temp_celsius || null
           ]);
-          
-          // Push to AI feed queue
+
           await db.run(
             `INSERT INTO ai_feed_queue (user_id, source_table, source_id, data_type, data_json)
              VALUES ($1, 'whoop_metrics', $2, 'recovery', $3)`,
             [
-              1, // default user
-              1, // placeholder - we'd need to fetch the actual id
+              userId,
+              parsePositiveInt(record.cycle_id || record.id, 1),
               JSON.stringify({
                 date,
                 recovery_score: score.recovery_score,
@@ -260,28 +357,24 @@ class WhoopService {
 
       // 2. SLEEP DATA
       console.log('[WHOOP] 😴 Fetching sleep...');
-      const sleepData = await this.getSleep(sevenDaysAgo, today);
+      const sleepData = await this.getSleep(startDate, endDate);
       results.sleep = sleepData.records?.length || 0;
       console.log(`[WHOOP]   ✓ ${results.sleep} sleep records`);
-      
+
       if (sleepData.records?.length > 0) {
         for (const record of sleepData.records) {
           const date = record.end ? record.end.split('T')[0] : new Date().toISOString().split('T')[0];
           const score = record.score || {};
           const stageSummary = score.stage_summary || {};
-          const sleepNeeded = score.sleep_needed || {};
-          
-          // Calculate hours from milliseconds
-          const msToHours = (ms) => ms ? ms / 3600000 : null;
           const sleepHours = msToHours(stageSummary.total_in_bed_time_milli);
-          
+
           await db.run(`
             INSERT INTO whoop_metrics (
-              date, sleep_score, sleep_hours, sleep_efficiency, sleep_consistency,
+              user_id, date, sleep_score, sleep_hours, sleep_efficiency, sleep_consistency,
               deep_sleep_hours, rem_sleep_hours, light_sleep_hours, awake_hours,
               respiratory_rate, sleep_cycles, disturbances
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-            ON CONFLICT(date) DO UPDATE SET
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            ON CONFLICT(user_id, date) DO UPDATE SET
               sleep_score = EXCLUDED.sleep_score,
               sleep_hours = EXCLUDED.sleep_hours,
               sleep_efficiency = EXCLUDED.sleep_efficiency,
@@ -294,6 +387,7 @@ class WhoopService {
               sleep_cycles = EXCLUDED.sleep_cycles,
               disturbances = EXCLUDED.disturbances
           `, [
+            userId,
             date,
             score.sleep_performance_percentage || null,
             sleepHours,
@@ -307,14 +401,13 @@ class WhoopService {
             stageSummary.sleep_cycle_count || null,
             stageSummary.disturbance_count || null
           ]);
-          
-          // Push to AI feed queue
+
           await db.run(
             `INSERT INTO ai_feed_queue (user_id, source_table, source_id, data_type, data_json)
              VALUES ($1, 'whoop_metrics', $2, 'sleep', $3)`,
             [
-              1, // default user
-              1, // placeholder
+              userId,
+              parsePositiveInt(record.id, 1),
               JSON.stringify({
                 date,
                 sleep_score: score.sleep_performance_percentage,
@@ -332,25 +425,30 @@ class WhoopService {
       // 3. CYCLES (Day Strain)
       console.log('[WHOOP] 💪 Fetching cycles...');
       try {
-        const cycleData = await this.getCycles(sevenDaysAgo, today);
+        const cycleData = await this.getCycles(startDate, endDate);
         results.cycles = cycleData.records?.length || 0;
         console.log(`[WHOOP]   ✓ ${results.cycles} cycle records`);
-        
+
         if (cycleData.records?.length > 0) {
           for (const record of cycleData.records) {
             const date = record.start ? record.start.split('T')[0] : new Date().toISOString().split('T')[0];
             const score = record.score || {};
-            
+            const cycleId = String(record.id);
+
             await db.run(`
-              INSERT INTO whoop_cycles (cycle_id, date, start_time, end_time, strain, kilojoules, avg_heart_rate, max_heart_rate)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-              ON CONFLICT(cycle_id) DO UPDATE SET
+              INSERT INTO whoop_cycles (user_id, cycle_id, date, start_time, end_time, strain, kilojoules, avg_heart_rate, max_heart_rate)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+              ON CONFLICT(user_id, cycle_id) DO UPDATE SET
                 strain = EXCLUDED.strain,
                 kilojoules = EXCLUDED.kilojoules,
                 avg_heart_rate = EXCLUDED.avg_heart_rate,
-                max_heart_rate = EXCLUDED.max_heart_rate
+                max_heart_rate = EXCLUDED.max_heart_rate,
+                start_time = EXCLUDED.start_time,
+                end_time = EXCLUDED.end_time,
+                date = EXCLUDED.date
             `, [
-              String(record.id),
+              userId,
+              cycleId,
               date,
               record.start || null,
               record.end || null,
@@ -359,18 +457,20 @@ class WhoopService {
               score.average_heart_rate || null,
               score.max_heart_rate || null
             ]);
-            
-            // Also update the daily metrics table
+
             await db.run(`
-              INSERT INTO whoop_metrics (date, day_strain, kilojoules, avg_heart_rate, max_heart_rate)
-              VALUES ($1, $2, $3, $4, $5)
-              ON CONFLICT(date) DO UPDATE SET
+              INSERT INTO whoop_metrics (user_id, date, day_strain, strain_score, kilojoules, avg_heart_rate, max_heart_rate)
+              VALUES ($1, $2, $3, $4, $5, $6, $7)
+              ON CONFLICT(user_id, date) DO UPDATE SET
                 day_strain = EXCLUDED.day_strain,
+                strain_score = EXCLUDED.strain_score,
                 kilojoules = EXCLUDED.kilojoules,
                 avg_heart_rate = EXCLUDED.avg_heart_rate,
                 max_heart_rate = EXCLUDED.max_heart_rate
             `, [
+              userId,
               date,
+              score.strain || null,
               score.strain || null,
               score.kilojoule ? Math.round(score.kilojoule) : null,
               score.average_heart_rate || null,
@@ -386,31 +486,46 @@ class WhoopService {
       // 4. WORKOUTS
       console.log('[WHOOP] 🏃 Fetching workouts...');
       try {
-        const workoutData = await this.getWorkouts(sevenDaysAgo, today);
+        const workoutData = await this.getWorkouts(startDate, endDate);
         results.workouts = workoutData.records?.length || 0;
         console.log(`[WHOOP]   ✓ ${results.workouts} workout records`);
-        
+
         if (workoutData.records?.length > 0) {
           for (const record of workoutData.records) {
             const score = record.score || {};
             const zones = score.zone_durations || {};
-            const msToMins = (ms) => ms ? Math.round(ms / 60000) : 0;
-            const duration = msToMins(record.end && record.start ? new Date(record.end) - new Date(record.start) : 0);
+            const durationMs = record.end && record.start ? new Date(record.end).getTime() - new Date(record.start).getTime() : 0;
+            const duration = msToMins(Math.max(durationMs, 0));
             const calories = score.kilojoule ? Math.round(score.kilojoule * 0.239) : null;
-            
+            const workoutId = String(record.id);
+
             await db.run(`
               INSERT INTO whoop_workouts (
-                workout_id, date, sport_name, start_time, end_time, duration_minutes,
+                user_id, workout_id, date, sport_name, start_time, end_time, duration_minutes,
                 strain, calories, avg_heart_rate, max_heart_rate, distance_meters,
                 altitude_gain_meters, zone_0_mins, zone_1_mins, zone_2_mins, zone_3_mins, zone_4_mins, zone_5_mins
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-              ON CONFLICT(workout_id) DO UPDATE SET
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+              ON CONFLICT(user_id, workout_id) DO UPDATE SET
                 strain = EXCLUDED.strain,
                 calories = EXCLUDED.calories,
                 avg_heart_rate = EXCLUDED.avg_heart_rate,
-                max_heart_rate = EXCLUDED.max_heart_rate
+                max_heart_rate = EXCLUDED.max_heart_rate,
+                distance_meters = EXCLUDED.distance_meters,
+                altitude_gain_meters = EXCLUDED.altitude_gain_meters,
+                duration_minutes = EXCLUDED.duration_minutes,
+                sport_name = EXCLUDED.sport_name,
+                start_time = EXCLUDED.start_time,
+                end_time = EXCLUDED.end_time,
+                date = EXCLUDED.date,
+                zone_0_mins = EXCLUDED.zone_0_mins,
+                zone_1_mins = EXCLUDED.zone_1_mins,
+                zone_2_mins = EXCLUDED.zone_2_mins,
+                zone_3_mins = EXCLUDED.zone_3_mins,
+                zone_4_mins = EXCLUDED.zone_4_mins,
+                zone_5_mins = EXCLUDED.zone_5_mins
             `, [
-              String(record.id),
+              userId,
+              workoutId,
               record.start ? record.start.split('T')[0] : null,
               record.sport_name || 'Unknown',
               record.start || null,
@@ -429,14 +544,13 @@ class WhoopService {
               msToMins(zones.zone_four_milli),
               msToMins(zones.zone_five_milli)
             ]);
-            
-            // Push to AI feed queue
+
             await db.run(
               `INSERT INTO ai_feed_queue (user_id, source_table, source_id, data_type, data_json)
                VALUES ($1, 'whoop_workouts', $2, 'workout', $3)`,
               [
-                1, // default user
-                1, // placeholder
+                userId,
+                parsePositiveInt(workoutId, 1),
                 JSON.stringify({
                   sport_name: record.sport_name || 'Unknown',
                   duration_minutes: duration,
@@ -457,8 +571,8 @@ class WhoopService {
       }
 
       console.log('[WHOOP] ✅ SYNC COMPLETE:', results);
-      return { 
-        success: true, 
+      return {
+        success: true,
         message: 'WHOOP data synced successfully',
         data: results
       };
@@ -472,15 +586,15 @@ class WhoopService {
     }
   }
 
-  async getTodayMetrics() {
+  async getTodayMetrics(userId = 1) {
     const today = new Date().toISOString().split('T')[0];
-    const metrics = await db.get('SELECT * FROM whoop_metrics ORDER BY date DESC LIMIT 1');
-    const workouts = await db.all('SELECT * FROM whoop_workouts WHERE date = ? ORDER BY start_time DESC', [today]);
-    return { ...metrics, workouts };
+    const metrics = await db.get('SELECT * FROM whoop_metrics WHERE user_id = $1 ORDER BY date DESC LIMIT 1', [userId]);
+    const workouts = await db.all('SELECT * FROM whoop_workouts WHERE user_id = $1 AND date = $2 ORDER BY start_time DESC', [userId, today]);
+    return metrics ? { ...metrics, workouts } : { workouts };
   }
 
-  async getLatestWorkouts(limit = 10) {
-    return await db.all('SELECT * FROM whoop_workouts ORDER BY start_time DESC LIMIT ?', [limit]);
+  async getLatestWorkouts(userId = 1, limit = 10) {
+    return await db.all('SELECT * FROM whoop_workouts WHERE user_id = $1 ORDER BY start_time DESC LIMIT $2', [userId, limit]);
   }
 
   isAuthenticated() {

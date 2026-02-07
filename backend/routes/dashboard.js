@@ -5,7 +5,7 @@ const foodService = require('../services/food');
 
 // Get user ID from authenticated request
 function getUserId(req) {
-  return req.user?.id;
+  return req.user?.userId || req.user?.id || 1;
 }
 
 // Get today's dashboard data

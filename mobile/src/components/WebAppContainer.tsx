@@ -252,9 +252,8 @@ export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage}) => 
           <View style={styles.loadingLogo}>
             <Text style={styles.loadingLogoText}>♥</Text>
           </View>
-          <Text style={styles.loadingTitle}>Health Tracker</Text>
           <ActivityIndicator size="large" color="#10B981" />
-          <Text style={styles.loadingText}>Syncing your wellness dashboard...</Text>
+          <Text style={styles.loadingText}>Syncing your dashboard...</Text>
         </View>
       )}
     </View>
@@ -289,17 +288,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 36,
   },
-  loadingTitle: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#10B981',
-    letterSpacing: 0.3,
-    marginBottom: 4,
-  },
   loadingText: {
     fontSize: 16,
     color: '#94a3b8',
-    marginTop: 4,
+    marginTop: 10,
   },
   errorContainer: {
     flex: 1,

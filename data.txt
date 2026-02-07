@@ -1,0 +1,88 @@
+warning: (arm64) /Users/tharun/Library/Developer/Xcode/DerivedData/TharunHealthTrackerMobile-axuarausydmxxbephuggkkkzfaxu/Build/Products/Debug-iphoneos/TharunHealthTrackerMobile.app/TharunHealthTrackerMobile empty dSYM file detected, dSYM was created with an executable with no debug info.
+[TSBackgroundFetch load]: (
+)
+[TSBGAppRefreshSubscriber load]: {
+}
+`UIScene` lifecycle will soon be required. Failure to adopt will result in an assert in the future.
+Running application TharunHealthTrackerMobile ({
+    initialProps =     {
+    };
+    rootTag = 1;
+})
+Initializing SQLitePlugin
+Detected docs path: /var/mobile/Containers/Data/Application/118C2EDE-6F22-4DA2-BB9A-E8B6E3F8CB43/Documents
+Detected Library path: /var/mobile/Containers/Data/Application/118C2EDE-6F22-4DA2-BB9A-E8B6E3F8CB43/Library
+no cloud sync at path: /var/mobile/Containers/Data/Application/118C2EDE-6F22-4DA2-BB9A-E8B6E3F8CB43/Library/LocalDatabase
+A NULL string is not a valid group container identifier.
+container_create_or_lookup_app_group_path_by_app_group_identifier: client sent invalid parameters
+Thread Performance Checker: Thread running at User-interactive quality-of-service class waiting on a lower QoS thread running at Default quality-of-service class. Investigate ways to avoid priority inversions
+PID: 1096, TID: 81709
+Backtrace
+=================================================================
+0   TharunHealthTrackerMobile.debug.dyl 0x0000000107bc4c70 -[SRRunLoopThread runLoop] + 44
+1   TharunHealthTrackerMobile.debug.dyl 0x0000000107bbef10 +[NSRunLoop(SRWebSocket) SR_networkRunLoop] + 56
+2   TharunHealthTrackerMobile.debug.dyl 0x0000000107bc3544 -[SRProxyConnect _openConnection] + 72
+3   TharunHealthTrackerMobile.debug.dyl 0x0000000107bc2968 -[SRProxyConnect _configureProxy] + 940
+4   TharunHealthTrackerMobile.debug.dyl 0x0000000107bc20fc -[SRProxyConnect openNetworkStreamWithCompletion:] + 100
+5   TharunHealthTrackerMobile.debug.dyl 0x0000000107bc6afc -[SRWebSocket open] + 640
+6   TharunHealthTrackerMobile.debug.dyl 0x000000010765cb40 -[RCTReconnectingWebSocket start] + 156
+7   TharunHealthTrackerMobile.debug.dyl 0x0000000107649260 -[RCTPackagerConnection init] + 444
+8   TharunHealthTrackerMobile.debug.dyl 0x000000010764907c __49+[RCTPackagerConnection sharedPackagerConnection]_block_invoke + 36
+9   libdispatch.dylib                   0x00000001050022e0 _dispatch_client_callout + 16
+10  libdispatch.dylib                   0x0000000104feb790 _dispatch_once_callout + 140
+11  TharunHealthTrackerMobile.debug.dyl 0x0000000107649030 +[RCTPackagerConnection sharedPackagerConnection] + 84
+12  TharunHealthTrackerMobile.debug.dyl 0x00000001076da8fc -[RCTDevSettings initialize] + 148
+13  TharunHealthTrackerMobile.debug.dyl 0x0000000107633fd0 -[RCTModuleData _initializeModule] + 92
+14  TharunHealthTrackerMobile.debug.dyl 0x00000001076338a0 -[RCTModuleData setUpInstanceAndBridge:] + 2392
+15  TharunHealthTrackerMobile.debug.dyl 0x00000001076355c0 -[RCTModuleData instance] + 1200
+16  TharunHealthTrackerMobile.debug.dyl 0x00000001075e145c -[RCTCxxBridge moduleForName:lazilyLoadIfNecessary:] + 696
+17  TharunHealthTrackerMobile.debug.dyl 0x000000010763f558 -[RCTModuleRegistry moduleForName:lazilyLoadIfNecessary:] + 124
+18  TharunHealthTrackerMobile.debug.dyl 0x000000010763f4d0 -[RCTModuleRegistry moduleForName:] + 48
+19  TharunHealthTrackerMobile.debug.dyl 0x00000001076ec268 -[RCTPerfMonitor devMenuItem] + 84
+20  TharunHealthTrackerMobile.debug.dyl 0x00000001076ec10c -[RCTPerfMonitor initialize] + 88
+21  TharunHealthTrackerMobile.debug.dyl 0x0000000107633fd0 -[RCTModuleData _initializeModule] + 92
+22  TharunHealthTrackerMobile.debug.dyl 0x00000001076338a0 -[RCTModuleData setUpInstanceAndBridge:] + 2392
+23  TharunHealthTrackerMobile.debug.dyl 0x0000000107635814 __25-[RCTModuleData instance]_block_invoke + 44
+24  TharunHealthTrackerMobile.debug.dyl 0x0000000107697620 RCTUnsafeExecuteOnMainQueueSync + 52
+25  TharunHealthTrackerMobile.debug.dyl 0x000000010763545c -[RCTModuleData instance] + 844
+26  TharunHealthTrackerMobile.debug.dyl 0x00000001075e6228 __49-[RCTCxxBridge _prepareModulesWithDispatchGroup:]_block_invoke + 160
+27  libdispatch.dylib                   0x0000000104fe863c _dispatch_call_block_and_release + 32
+28  libdispatch.dylib                   0x00000001050022e0 _dispatch_client_callout + 16
+29  libdispatch.dylib                   0x00000001050235f4 _dispatch_main_queue_drain.cold.5 + 1196
+30  libdispatch.dylib                   0x0000000104ff8778 _dispatch_main_queue_drain + 180
+31  libdispatch.dylib                   0x0000000104ff86b4 _dispatch_main_queue_callback_4CF + 44
+32  CoreFoundation                      0x00000001a2a442b4 2F32D384-4637-3018-843E-4FC875B865C4 + 434868
+33  CoreFoundation                      0x00000001a29f7b3c 2F32D384-4637-3018-843E-4FC875B865C4 + 121660
+34  CoreFoundation                      0x00000001a29f6a6c 2F32D384-4637-3018-843E-4FC875B865C4 + 117356
+35  GraphicsServices                    0x00000002473e9498 GSEventRunModal + 120
+36  UIKitCore                           0x00000001a84a470c 90BEC754-B3B2-319A-8295-73F456DEEAEB + 648972
+37  UIKitCore                           0x00000001a844cf6c UIApplicationMain + 336
+38  TharunHealthTrackerMobile.debug.dyl 0x00000001074d7bf8 __debug_main_executable_dylib_entry_point + 96
+39  dyld                                0x000000019f9c6e28 0FFC14EA-C2DF-3725-B7AF-44004B8DC998 + 20008
+Unbalanced calls start/end for tag 19
+Running "TharunHealthTrackerMobile" with {"rootTag":1,"initialProps":{}}
+Invariant Violation: "TharunHealthTrackerMobile" has not been registered. This can happen if:
+* Metro (the local dev server) is run from the wrong folder. Check if Metro is running, stop it and restart it in the current project.
+* A module failed to load due to an error and `AppRegistry.registerComponent` wasn't called., js engine: hermes
+Running surface LogBox ({
+    initialProps =     {
+    };
+    rootTag = 11;
+})
+nw_socket_handle_socket_event [C5:1] Socket SO_ERROR [61: Connection refused]
+nw_endpoint_flow_failed_with_error [C5 10.0.0.116:8097 in_progress socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: moderate)] already failing, returning
+nw_connection_get_connected_socket_block_invoke [C5] Client called nw_connection_get_connected_socket on unconnected nw_connection
+TCP Conn 0x106795220 Failed : error 0:61 [61]
+nw_connection_copy_protocol_metadata_internal_block_invoke [C5] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+nw_connection_copy_protocol_metadata_internal_block_invoke [C5] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+nw_connection_copy_protocol_metadata_internal_block_invoke [C5] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+nw_connection_copy_connected_local_endpoint_block_invoke [C5] Client called nw_connection_copy_connected_local_endpoint on unconnected nw_connection
+nw_connection_copy_connected_remote_endpoint_block_invoke [C5] Client called nw_connection_copy_connected_remote_endpoint on unconnected nw_connection
+*** Terminating app due to uncaught exception 'NSInvalidArgumentException', reason: '-[AppDelegate applicationDidBecomeActive:]: unrecognized selector sent to instance 0x1066ea4c0'
+*** First throw call stack:
+(0x1a2a9f964 0x19f971814 0x1a2b3a2c0 0x1a9854798 0x1a2a1f1a4 0x1a2a27200 0x1074d7980 0x1a982703c 0x1a8e352e4 0x1a8e355b8 0x1a8e35044 0x1a8e404c4 0x1a92b351c 0x1a84e0594 0x1a8e401c0 0x1a8c7f420 0x1a8c7e4b4 0x1a8c7f08c 0x1a92dc684 0x1c2ba355c 0x1c2ba21d4 0x1c2ba320c 0x1c2c12d38 0x1c2bcf460 0x1c2baf894 0x1050022e0 0x104fec998 0x1ba2a01d4 0x1ba2a0054 0x1a2a42f10 0x1a2a42e84 0x1a2a20acc 0x1a29f76d8 0x1a29f6a6c 0x2473e9498 0x1a84a470c 0x1a844cf6c 0x1074d7bf8 0x19f9c6e28)
+libc++abi: terminating due to uncaught exception of type NSException
+terminating due to uncaught exception of type NSException
+*** Terminating app due to uncaught exception 'NSInvalidArgumentException', reason: '-[AppDelegate applicationDidBecomeActive:]: unrecognized selector sent to instance 0x1066ea4c0'
+*** First throw call stack:
+(0x1a2a9f964 0x19f971814 0x1a2b3a2c0 0x1a9854798 0x1a2a1f1a4 0x1a2a27200 0x1074d7980 0x1a982703c 0x1a8e352e4 0x1a8e355b8 0x1a8e35044 0x1a8e404c4 0x1a92b351c 0x1a84e0594 0x1a8e401c0 0x1a8c7f420 0x1a8c7e4b4 0x1a8c7f08c 0x1a92dc684 0x1c2ba355c 0x1c2ba21d4 0x1c2ba320c 0x1c2c12d38 0x1c2bcf460 0x1c2baf894 0x1050022e0 0x104fec998 0x1ba2a01d4 0x1ba2a0054 0x1a2a42f10 0x1a2a42e84 0x1a2a20acc 0x1a29f76d8 0x1a29f6a6c 0x2473e9498 0x1a84a470c 0x1a844cf6c 0x1074d7bf8 0x19f9c6e28)

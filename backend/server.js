@@ -20,6 +20,7 @@ const whoopService = require('./services/whoop');
 const fitbitService = require('./services/fitbit');
 const fitbitWebhookRoutes = require('./routes/fitbitWebhook');
 const teamsRoutes = require('./routes/teams');
+const plansRoutes = require('./routes/plans/index');
 const challengeProgress = require('./services/challengeProgress');
 
 const app = express();
@@ -61,6 +62,7 @@ app.use('/api/mobile', mobileRoutes);
 app.use('/api/wearables', wearablesRoutes);
 app.use('/api/ai-coach', aiCoachRoutes);
 app.use('/api/teams', teamsRoutes);
+app.use('/api/teams/:teamId/plans', authenticateToken, plansRoutes);
 
 // Tracking routes - mounted at root /api for frontend compatibility
 app.use('/api/water', authenticateToken, (req, res, next) => {

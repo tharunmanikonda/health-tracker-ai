@@ -14,13 +14,19 @@ const whatsappRoutes = require('./routes/whatsapp');
 const mobileRoutes = require('./routes/mobile');
 const wearablesRoutes = require('./routes/wearables');
 const aiCoachRoutes = require('./routes/aiCoach');
+const ouraRoutes = require('./routes/oura');
+const garminRoutes = require('./routes/garmin');
 const whoopService = require('./services/whoop');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json({
+  verify: (req, _res, buf) => {
+    req.rawBody = buf.toString('utf8');
+  },
+}));
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // Initialize database
@@ -28,6 +34,8 @@ db.init();
 
 // Public routes (no auth required)
 app.use('/api/auth', authRouter);
+app.use('/api/oura', ouraRoutes);
+app.use('/api/garmin', garminRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

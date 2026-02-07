@@ -7,7 +7,7 @@ import {
   Battery, Sun, Sunrise, GlassWater, Scale,
   Smile, Bed, Timer, Footprints, Pill, X,
   Trophy, ChevronUp, ChevronDown, ArrowUp, ArrowDown,
-  Utensils, ScanLine
+  Utensils, ScanLine, Watch
 } from 'lucide-react'
 
 function Dashboard() {
@@ -15,6 +15,11 @@ function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [whoopConnected, setWhoopConnected] = useState(false)
+  const [ouraStatus, setOuraStatus] = useState({ connected: false, webhookConfigured: false })
+  const [garminStatus, setGarminStatus] = useState({ connected: false, webhookEnabled: false })
+  const [syncingOura, setSyncingOura] = useState(false)
+  const [syncingGarmin, setSyncingGarmin] = useState(false)
+  const [integrationLoading, setIntegrationLoading] = useState(false)
   
   // Modal states
   const [activeModal, setActiveModal] = useState(null)
@@ -32,6 +37,7 @@ function Dashboard() {
   useEffect(() => {
     fetchDashboard()
     checkWhoopStatus()
+    fetchIntegrationStatuses()
     fetchWater()
   }, [])
 
@@ -64,6 +70,32 @@ function Dashboard() {
     }
   }
 
+  const fetchIntegrationStatuses = async () => {
+    setIntegrationLoading(true)
+    try {
+      const [ouraRes, garminRes] = await Promise.allSettled([
+        axios.get('/api/oura/status'),
+        axios.get('/api/garmin/status')
+      ])
+
+      if (ouraRes.status === 'fulfilled') {
+        setOuraStatus(ouraRes.value.data?.status || { connected: false, webhookConfigured: false })
+      } else {
+        setOuraStatus({ connected: false, webhookConfigured: false })
+      }
+
+      if (garminRes.status === 'fulfilled') {
+        setGarminStatus(garminRes.value.data?.status || { connected: false, webhookEnabled: false })
+      } else {
+        setGarminStatus({ connected: false, webhookEnabled: false })
+      }
+    } catch (err) {
+      console.error('Failed to load integration statuses:', err)
+    } finally {
+      setIntegrationLoading(false)
+    }
+  }
+
   const syncWhoop = async () => {
     if (!whoopConnected) {
       window.location.href = '/api/whoop/auth'
@@ -78,6 +110,61 @@ function Dashboard() {
       console.error('Sync failed:', err)
     } finally {
       setSyncing(false)
+    }
+  }
+
+  const connectIntegration = async (provider) => {
+    try {
+      const res = await axios.get(`/api/${provider}/auth-url`)
+      const authUrl = res.data?.authUrl
+      if (!authUrl) {
+        throw new Error(`No authorization URL returned for ${provider}`)
+      }
+      window.location.href = authUrl
+    } catch (err) {
+      console.error(`Failed to connect ${provider}:`, err)
+      alert(`Could not start ${provider} connection. Check server logs and credentials.`)
+    }
+  }
+
+  const syncOura = async () => {
+    if (!ouraStatus.connected) return
+    setSyncingOura(true)
+    try {
+      await axios.post('/api/oura/sync', { days: 30 })
+      await fetchDashboard()
+      await fetchIntegrationStatuses()
+    } catch (err) {
+      console.error('Failed to sync Oura:', err)
+      alert('Oura sync failed. Check credentials/webhook setup.')
+    } finally {
+      setSyncingOura(false)
+    }
+  }
+
+  const syncGarmin = async () => {
+    if (!garminStatus.connected) return
+    setSyncingGarmin(true)
+    try {
+      await axios.post('/api/garmin/sync', { days: 7 })
+      await fetchDashboard()
+      await fetchIntegrationStatuses()
+    } catch (err) {
+      console.error('Failed to sync Garmin:', err)
+      alert('Garmin sync failed. Verify OAuth and pull/webhook config.')
+    } finally {
+      setSyncingGarmin(false)
+    }
+  }
+
+  const disconnectIntegration = async (provider) => {
+    if (!window.confirm(`Disconnect ${provider}?`)) return
+    try {
+      await axios.post(`/api/${provider}/disconnect`)
+      await fetchIntegrationStatuses()
+    } catch (err) {
+      console.error(`Failed to disconnect ${provider}:`, err)
+      alert(`Could not disconnect ${provider}.`)
     }
   }
 
@@ -462,18 +549,110 @@ function Dashboard() {
 
   return (
     <div className="dashboard">
-      {/* WHOOP Connection Banner */}
-      {!whoopConnected && (
-        <div className="connect-banner">
-          <div>
-            <h3>Connect WHOOP</h3>
-            <p>Sync recovery, sleep, strain & workouts</p>
-          </div>
-          <button className="btn btn-primary btn-sm" onClick={() => window.location.href = '/api/whoop/auth'}>
-            Connect <ChevronRight size={16} />
+      <div className="card integrations-panel">
+        <div className="section-header" style={{marginBottom: '0.75rem'}}>
+          <h3 className="section-title">
+            <Watch size={18} /> Device Integrations
+          </h3>
+          <button
+            className="btn btn-icon btn-ghost"
+            onClick={fetchIntegrationStatuses}
+            disabled={integrationLoading}
+            title="Refresh integration status"
+            style={{width: '32px', height: '32px', minHeight: '32px', padding: '0.3rem'}}
+          >
+            <RefreshCw size={14} className={integrationLoading ? 'spin' : ''} />
           </button>
         </div>
-      )}
+
+        <div className="integration-cards">
+          <div className="integration-card">
+            <div className="integration-card-head">
+              <div>
+                <div className="integration-name">WHOOP</div>
+                <div className={`integration-status ${whoopConnected ? 'connected' : 'disconnected'}`}>
+                  {whoopConnected ? 'Connected' : 'Not connected'}
+                </div>
+              </div>
+            </div>
+            <div className="integration-actions-row">
+              {!whoopConnected ? (
+                <button className="btn btn-primary btn-sm" onClick={() => window.location.href = '/api/whoop/auth'}>
+                  Connect <ChevronRight size={14} />
+                </button>
+              ) : (
+                <button className="btn btn-secondary btn-sm" onClick={syncWhoop} disabled={syncing}>
+                  {syncing ? <RefreshCw size={14} className="spin" /> : <RefreshCw size={14} />} Sync
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="integration-card">
+            <div className="integration-card-head">
+              <div>
+                <div className="integration-name">Oura Ring</div>
+                <div className={`integration-status ${ouraStatus.connected ? 'connected' : 'disconnected'}`}>
+                  {ouraStatus.connected ? 'Connected' : 'Not connected'}
+                </div>
+              </div>
+              {ouraStatus.connected && (
+                <span className={`badge ${ouraStatus.webhookConfigured ? 'badge-success' : 'badge-warning'}`}>
+                  {ouraStatus.webhookConfigured ? 'Webhook on' : 'Webhook off'}
+                </span>
+              )}
+            </div>
+            <div className="integration-actions-row">
+              {!ouraStatus.connected ? (
+                <button className="btn btn-primary btn-sm" onClick={() => connectIntegration('oura')}>
+                  Connect <ChevronRight size={14} />
+                </button>
+              ) : (
+                <>
+                  <button className="btn btn-secondary btn-sm" onClick={syncOura} disabled={syncingOura}>
+                    {syncingOura ? <RefreshCw size={14} className="spin" /> : <RefreshCw size={14} />} Sync
+                  </button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => disconnectIntegration('oura')}>
+                    Disconnect
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="integration-card">
+            <div className="integration-card-head">
+              <div>
+                <div className="integration-name">Garmin Watch</div>
+                <div className={`integration-status ${garminStatus.connected ? 'connected' : 'disconnected'}`}>
+                  {garminStatus.connected ? 'Connected' : 'Not connected'}
+                </div>
+              </div>
+              {garminStatus.connected && (
+                <span className={`badge ${garminStatus.webhookEnabled ? 'badge-success' : 'badge-warning'}`}>
+                  {garminStatus.webhookEnabled ? 'Webhook on' : 'Webhook off'}
+                </span>
+              )}
+            </div>
+            <div className="integration-actions-row">
+              {!garminStatus.connected ? (
+                <button className="btn btn-primary btn-sm" onClick={() => connectIntegration('garmin')}>
+                  Connect <ChevronRight size={14} />
+                </button>
+              ) : (
+                <>
+                  <button className="btn btn-secondary btn-sm" onClick={syncGarmin} disabled={syncingGarmin}>
+                    {syncingGarmin ? <RefreshCw size={14} className="spin" /> : <RefreshCw size={14} />} Sync
+                  </button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => disconnectIntegration('garmin')}>
+                    Disconnect
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Main Stats Grid */}
       <div className="grid grid-2">

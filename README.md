@@ -8,12 +8,14 @@ A comprehensive health tracking web app that integrates with WHOOP for biometric
 - **Barcode Scanner**: Scan product barcodes to auto-populate nutrition info
 - **OCR Label Scanner**: Take photos of nutrition labels to extract data automatically
 - **WhatsApp Integration**: Text your food intake for hands-free logging
+- **Oura Ring Integration**: OAuth + webhook-based near-real-time sync (about 30s after Oura app sync)
+- **Garmin Watch Integration**: OAuth2 + webhook-driven updates with throttling-safe sync pipeline
 - **Dashboard**: Daily overview of calories, macros, and WHOOP metrics
 - **Insights**: Correlation analysis between nutrition and recovery
 
 ## Tech Stack
 
-- **Backend**: Node.js, Express, SQLite
+- **Backend**: Node.js, Express, PostgreSQL
 - **Frontend**: React, Recharts
 - **OCR**: Tesseract.js
 - **Barcode**: html5-qrcode
@@ -32,7 +34,7 @@ cd backend
 cp .env.example .env
 # Edit .env and add your WHOOP API key
 npm install
-npm start
+npm run dev
 ```
 
 ### 3. Frontend Setup (new terminal)
@@ -60,6 +62,41 @@ npm start
 3. Add credentials to `.env`
 4. Configure webhook URL to `https://your-domain/api/whatsapp/webhook`
 
+## Oura Setup (Optional, Recommended for near-real-time)
+
+1. Create an OAuth app in Oura Cloud: `https://cloud.ouraring.com/oauth/applications`
+2. Set these in `backend/.env`:
+   - `OURA_CLIENT_ID`
+   - `OURA_CLIENT_SECRET`
+   - `OURA_REDIRECT_URI` (default: `http://localhost:3001/api/oura/callback`)
+   - `OURA_WEBHOOK_URL` (must be public HTTPS URL)
+   - `OURA_WEBHOOK_VERIFICATION_TOKEN` (your secret token)
+3. Generate auth URL (while logged into this app): `GET /api/oura/auth-url`
+4. Complete OAuth. Callback endpoint is `GET /api/oura/callback`.
+5. Ensure subscriptions (optional manual trigger): `POST /api/oura/webhook/subscriptions/ensure`
+
+Notes:
+- Oura docs recommend webhooks over polling for real-time updates and to avoid rate limits.
+- This integration uses webhook-first sync + rate-limit-aware API fetching with 429 backoff.
+
+## Garmin Setup (Optional, Enterprise Program)
+
+1. Apply to Garmin Connect Developer Program and get app credentials.
+2. Set these in `backend/.env`:
+   - `GARMIN_CLIENT_ID`
+   - `GARMIN_CLIENT_SECRET`
+   - `GARMIN_REDIRECT_URI` (default: `http://localhost:3001/api/garmin/callback`)
+   - `GARMIN_WEBHOOK_SECRET` (if Garmin signing is enabled)
+3. Generate auth URL while logged in: `GET /api/garmin/auth-url`
+4. Complete OAuth callback at: `GET /api/garmin/callback`
+5. Configure Garmin webhook target: `POST /api/garmin/webhook`
+6. Optional manual pull (if Garmin grants pull endpoints): set `GARMIN_PULL_ENDPOINTS`
+
+Notes:
+- Garmin recommends event-driven integrations (notifications can arrive within seconds).
+- Public docs do not publish a single numeric global rate limit; Garmin references throttled access in program docs.
+- This implementation uses webhook-first updates, queueing, and retry/backoff for `429/503`.
+
 ## Usage
 
 ### Dashboard
@@ -84,7 +121,7 @@ See correlations between your nutrition and WHOOP recovery metrics over time.
 
 ## Database
 
-SQLite database stored at `database/health_tracker.db`
+PostgreSQL database (configured via `DATABASE_URL`)
 
 Tables:
 - `whoop_metrics` - WHOOP data synced daily

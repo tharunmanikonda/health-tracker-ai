@@ -323,6 +323,92 @@ async function createTables() {
       )
     `);
 
+    // Oura webhook subscriptions (app-level webhook registrations)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS oura_webhook_subscriptions (
+        id SERIAL PRIMARY KEY,
+        subscription_id TEXT UNIQUE NOT NULL,
+        data_type TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        callback_url TEXT NOT NULL,
+        expiration_time TIMESTAMP,
+        active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Oura webhook events (for idempotency + debugging)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS oura_webhook_events (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        oura_user_id TEXT,
+        event_type TEXT NOT NULL,
+        data_type TEXT NOT NULL,
+        object_id TEXT NOT NULL,
+        event_time TIMESTAMP NOT NULL,
+        payload JSONB NOT NULL,
+        processed BOOLEAN DEFAULT false,
+        process_error TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, data_type, event_type, object_id, event_time)
+      )
+    `);
+
+    // Oura documents (raw canonical payload cache)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS oura_documents (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        data_type TEXT NOT NULL,
+        document_id TEXT NOT NULL,
+        day DATE,
+        start_time TIMESTAMP,
+        end_time TIMESTAMP,
+        summary_value REAL,
+        raw_json JSONB NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, data_type, document_id)
+      )
+    `);
+
+    // Garmin webhook events (idempotency + debugging)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS garmin_webhook_events (
+        id SERIAL PRIMARY KEY,
+        event_id TEXT UNIQUE NOT NULL,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        provider_user_id TEXT,
+        event_type TEXT NOT NULL,
+        data_type TEXT NOT NULL,
+        event_time TIMESTAMP NOT NULL,
+        payload JSONB NOT NULL,
+        processed BOOLEAN DEFAULT false,
+        process_error TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Garmin documents cache
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS garmin_documents (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        provider_user_id TEXT,
+        data_type TEXT NOT NULL,
+        document_id TEXT NOT NULL,
+        day DATE,
+        start_time TIMESTAMP,
+        end_time TIMESTAMP,
+        raw_json JSONB NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, data_type, document_id)
+      )
+    `);
+
     // AI Coach chat messages
     await client.query(`
       CREATE TABLE IF NOT EXISTS ai_chat_messages (
@@ -353,6 +439,13 @@ async function createTables() {
       CREATE INDEX IF NOT EXISTS idx_ai_feed_processed ON ai_feed_queue(user_id, processed, created_at);
       CREATE INDEX IF NOT EXISTS idx_ai_feed_type ON ai_feed_queue(data_type);
       CREATE INDEX IF NOT EXISTS idx_webhook_events_user ON webhook_events(user_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_oura_events_user_created ON oura_webhook_events(user_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_oura_events_processed ON oura_webhook_events(processed, created_at);
+      CREATE INDEX IF NOT EXISTS idx_oura_documents_user_day ON oura_documents(user_id, day);
+      CREATE INDEX IF NOT EXISTS idx_oura_subscriptions_active ON oura_webhook_subscriptions(active, data_type, event_type);
+      CREATE INDEX IF NOT EXISTS idx_garmin_events_user_created ON garmin_webhook_events(user_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_garmin_events_processed ON garmin_webhook_events(processed, created_at);
+      CREATE INDEX IF NOT EXISTS idx_garmin_documents_user_day ON garmin_documents(user_id, day);
     `);
 
     await client.query('COMMIT');

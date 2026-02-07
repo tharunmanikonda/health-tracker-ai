@@ -295,6 +295,80 @@ body {
 }
 
 /* ========================================
+   INTEGRATIONS
+   ======================================== */
+.integrations-panel {
+  margin-bottom: 1rem;
+  padding: 1rem;
+}
+
+.integration-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+.integration-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(15, 23, 42, 0.35);
+  padding: 0.85rem;
+}
+
+.integration-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.integration-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.integration-status {
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.integration-status::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.integration-status.connected::before {
+  background: var(--success);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
+
+.integration-status.disconnected::before {
+  background: var(--text-muted);
+}
+
+.integration-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+@media (min-width: 760px) {
+  .integration-cards {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ========================================
    GRID LAYOUTS
    ======================================== */
 .grid {

@@ -48,6 +48,24 @@ FITBIT_CLIENT_SECRET=your_fitbit_secret
 GOOGLE_CLIENT_ID=your_google_id
 GOOGLE_CLIENT_SECRET=your_google_secret
 
+# Optional - for Oura integration
+OURA_CLIENT_ID=your_oura_client_id
+OURA_CLIENT_SECRET=your_oura_client_secret
+OURA_REDIRECT_URI=http://localhost:3001/api/oura/callback
+OURA_WEBHOOK_URL=https://your-public-domain/api/oura/webhook
+OURA_WEBHOOK_VERIFICATION_TOKEN=your_random_secret
+
+# Optional - for Garmin integration (approved Garmin program required)
+GARMIN_CLIENT_ID=your_garmin_client_id
+GARMIN_CLIENT_SECRET=your_garmin_client_secret
+GARMIN_REDIRECT_URI=http://localhost:3001/api/garmin/callback
+GARMIN_WEBHOOK_SECRET=your_garmin_webhook_secret
+# Optional overrides
+# GARMIN_AUTH_URL=https://diauth.garmin.com/di-oauth2-service/oauth/authorize
+# GARMIN_TOKEN_URL=https://diauth.garmin.com/di-oauth2-service/oauth/token
+# GARMIN_API_BASE_URL=https://apis.garmin.com
+# GARMIN_PULL_ENDPOINTS=/wellness-api/rest/dailies,/wellness-api/rest/epochs
+
 # Optional - for AI Coach
 KIMI_API_KEY=your_kimi_key
 # or

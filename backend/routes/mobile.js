@@ -2,19 +2,54 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 
+function safeJson(value) {
+  if (value == null) return null;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  return value;
+}
+
 // ====================
 // MOBILE HEALTH SYNC
 // ====================
 
-// POST /api/mobile/health/sync - Receive health data from mobile app
+function normalizeMobileSource(source) {
+  if (source === 'healthkit') return 'apple_healthkit';
+  if (source === 'healthconnect') return 'health_connect';
+  return source;
+}
+
+function isSameMetric(existing, incoming) {
+  if (!existing) return false;
+  const existingValue = Number(existing.value);
+  const incomingValue = Number(incoming.value);
+  if (!Number.isFinite(existingValue) || !Number.isFinite(incomingValue)) return false;
+
+  const existingMetadata = safeJson(existing.metadata);
+  const incomingMetadata = incoming.metadata || null;
+
+  return (
+    existingValue === incomingValue &&
+    (existing.unit || null) === (incoming.unit || null) &&
+    JSON.stringify(existingMetadata || null) === JSON.stringify(incomingMetadata)
+  );
+}
+
+// POST /api/mobile/sync - Receive health data from mobile app
 router.post('/sync', async (req, res) => {
   try {
     const userId = (req.user.userId || req.user.id);
     const { source, metrics } = req.body;
+    const normalizedSource = normalizeMobileSource(source);
     
     // Validate source
     const validSources = ['apple_healthkit', 'samsung_health', 'health_connect', 'google_fit', 'fitbit', 'google_wear_os'];
-    if (!validSources.includes(source)) {
+    if (!validSources.includes(normalizedSource)) {
       return res.status(400).json({ error: 'Invalid source' });
     }
     
@@ -25,19 +60,46 @@ router.post('/sync', async (req, res) => {
     const insertedIds = [];
     
     for (const metric of metrics) {
+      if (!metric?.type || metric?.value == null) continue;
+
+      const startTime = metric.startTime || null;
+      const endTime = metric.endTime || null;
+      const metadata = metric.metadata || null;
+
+      const existing = await db.get(
+        `SELECT id, value, unit, metadata
+         FROM mobile_health_metrics
+         WHERE user_id = $1
+           AND source = $2
+           AND metric_type = $3
+           AND start_time IS NOT DISTINCT FROM $4::timestamp
+           AND end_time IS NOT DISTINCT FROM $5::timestamp
+         LIMIT 1`,
+        [userId, normalizedSource, metric.type, startTime, endTime]
+      );
+
+      if (isSameMetric(existing, metric)) {
+        insertedIds.push(existing.id);
+        continue;
+      }
+
+      if (existing?.id) {
+        await db.run('DELETE FROM mobile_health_metrics WHERE id = $1', [existing.id]);
+      }
+
       const result = await db.run(
         `INSERT INTO mobile_health_metrics 
          (user_id, source, metric_type, value, unit, start_time, end_time, metadata)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
         [
           userId,
-          source,
+          normalizedSource,
           metric.type,
-          metric.value,
+          Number(metric.value),
           metric.unit || null,
-          metric.startTime || null,
-          metric.endTime || null,
-          metric.metadata ? JSON.stringify(metric.metadata) : null
+          startTime,
+          endTime,
+          metadata ? JSON.stringify(metadata) : null
         ]
       );
       
@@ -52,7 +114,7 @@ router.post('/sync', async (req, res) => {
           result.id,
           metric.type,
           JSON.stringify({
-            source,
+            source: normalizedSource,
             type: metric.type,
             value: metric.value,
             unit: metric.unit,
@@ -69,7 +131,7 @@ router.post('/sync', async (req, res) => {
          VALUES ($1, 'health_data_changed', $2)`,
         [
           userId,
-          JSON.stringify({ source, type: metric.type, value: metric.value })
+          JSON.stringify({ source: normalizedSource, type: metric.type, value: metric.value })
         ]
       );
     }
@@ -118,7 +180,7 @@ router.get('/latest', async (req, res) => {
       count: metrics.length,
       metrics: metrics.map(m => ({
         ...m,
-        metadata: m.metadata ? JSON.parse(m.metadata) : null
+        metadata: safeJson(m.metadata)
       }))
     });
     
@@ -137,7 +199,7 @@ router.get('/summary', async (req, res) => {
     const summary = await db.get(`
       SELECT 
         COALESCE(SUM(CASE WHEN metric_type = 'steps' THEN value ELSE 0 END), 0) as total_steps,
-        COALESCE(SUM(CASE WHEN metric_type = 'active_energy' THEN value ELSE 0 END), 0) as total_active_calories,
+        COALESCE(SUM(CASE WHEN metric_type = 'active_calories' THEN value ELSE 0 END), 0) as total_active_calories,
         COALESCE(SUM(CASE WHEN metric_type = 'distance' THEN value ELSE 0 END), 0) as total_distance,
         COALESCE(AVG(CASE WHEN metric_type = 'heart_rate' THEN value END), 0) as avg_heart_rate,
         COALESCE(MAX(CASE WHEN metric_type = 'heart_rate' THEN value END), 0) as max_heart_rate,
@@ -210,7 +272,7 @@ router.get('/ai-feed', async (req, res) => {
       count: items.length,
       items: items.map(item => ({
         ...item,
-        data: JSON.parse(item.data_json)
+        data: safeJson(item.data_json)
       }))
     });
     
@@ -297,7 +359,7 @@ router.get('/webhook/events', async (req, res) => {
       success: true,
       events: events.map(e => ({
         ...e,
-        payload: e.payload ? JSON.parse(e.payload) : null
+        payload: safeJson(e.payload)
       }))
     });
     

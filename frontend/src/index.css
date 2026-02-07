@@ -2338,3 +2338,1050 @@ a:focus-visible {
   gap: 0.375rem;
   flex-shrink: 0;
 }
+
+/* ========================================
+   WEEKLY PLANS
+   ======================================== */
+
+/* Week day tab bar */
+.week-tabs {
+  display: flex;
+  gap: 0.375rem;
+  overflow-x: auto;
+  padding: 0.25rem 0;
+}
+
+.week-tab {
+  flex: 1;
+  min-width: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.5rem 0.375rem;
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.week-tab:active {
+  transform: scale(0.95);
+}
+
+.week-tab.active {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  color: white;
+  border-color: transparent;
+}
+
+.week-tab.today::after {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--primary);
+  position: absolute;
+  bottom: 3px;
+}
+
+.week-tab.active.today::after {
+  background: white;
+}
+
+.week-tab-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.week-tab-date {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+/* Exercise rows */
+.exercise-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius);
+  margin-bottom: 0.375rem;
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.exercise-row:active {
+  transform: scale(0.98);
+}
+
+.exercise-row.completed {
+  opacity: 0.6;
+}
+
+.exercise-row.completed > div:nth-child(2) > div:first-child {
+  text-decoration: line-through;
+}
+
+.exercise-check {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.exercise-check.checked {
+  background: var(--success);
+  border-color: var(--success);
+  color: white;
+}
+
+/* Muscle group header */
+.muscle-group-header {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--primary);
+  margin-bottom: 0.5rem;
+  padding-left: 0.25rem;
+}
+
+/* Meal items */
+.meal-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius);
+  margin-bottom: 0.375rem;
+  border: 1px solid var(--glass-border);
+  transition: all var(--transition-fast);
+}
+
+.meal-item.logged {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.05);
+}
+
+/* Meal type header */
+.meal-type-header {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 0.375rem;
+  padding-left: 0.25rem;
+}
+
+/* Food progress card */
+.food-progress-card {
+  padding: 0.875rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+  border: 1px solid var(--glass-border);
+}
+
+/* Trainer Dashboard */
+.trainer-member-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+}
+
+.trainer-week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.375rem;
+}
+
+.trainer-day-cell-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.trainer-day-cell {
+  width: 100%;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  transition: all var(--transition-fast);
+}
+
+.trainer-day-cell.complete {
+  background: var(--success);
+}
+
+.trainer-day-cell.partial {
+  background: var(--warning);
+}
+
+.trainer-day-cell.empty {
+  background: var(--bg-tertiary);
+}
+
+/* ========================================
+   CREATE PLAN PAGE (cpp-)
+   Full-page plan builder with glass design
+   ======================================== */
+.cpp {
+  max-width: 640px;
+  margin: 0 auto;
+  padding-bottom: 100px;
+}
+
+.cpp-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.cpp-back {
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.cpp-back:active { transform: scale(0.95); }
+
+.cpp-title {
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.cpp-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.125rem;
+}
+
+/* Plan info card */
+.cpp-info-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  padding: 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 1rem;
+}
+
+.cpp-info-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex-shrink: 0;
+}
+
+.cpp-title-input {
+  border: none !important;
+  background: none !important;
+  padding: 0 !important;
+  min-height: 0 !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  font-family: var(--font-heading) !important;
+  color: var(--text-primary) !important;
+  box-shadow: none !important;
+  outline: none !important;
+  width: 100%;
+}
+
+.cpp-title-input::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.cpp-date-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.375rem;
+}
+
+.cpp-date-row label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  width: auto;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  margin: 0;
+}
+
+.cpp-date-input {
+  border: none !important;
+  background: none !important;
+  padding: 0 !important;
+  min-height: 0 !important;
+  font-size: 0.8rem !important;
+  color: var(--primary) !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+  width: auto !important;
+}
+
+/* Stats bar */
+.cpp-stats {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.625rem 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+}
+
+.cpp-stat {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.cpp-stat svg {
+  color: var(--primary);
+}
+
+/* Section label */
+.cpp-section-label {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 0.625rem;
+  padding-left: 0.125rem;
+}
+
+/* Mini week overview */
+.cpp-week-overview {
+  display: flex;
+  gap: 0.375rem;
+  margin-bottom: 0.75rem;
+}
+
+.cpp-week-dot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+}
+
+.cpp-week-dot span {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.cpp-week-dot.filled {
+  border-color: rgba(14, 165, 233, 0.3);
+}
+
+.cpp-week-dot.filled span {
+  color: var(--primary);
+}
+
+.cpp-week-dot-indicator {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+}
+
+/* Day list */
+.cpp-days {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Sticky Save Bar */
+.cpp-save-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0.75rem 1rem;
+  padding-bottom: calc(0.75rem + var(--safe-bottom));
+  background: var(--bg-primary);
+  border-top: 1px solid var(--glass-border);
+  z-index: 50;
+}
+
+.cpp-save-bar .btn {
+  max-width: 640px;
+  margin: 0 auto;
+  display: flex;
+}
+
+/* ========================================
+   DAY ACCORDION (da-)
+   ======================================== */
+.da {
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color var(--transition-fast);
+}
+
+.da--open {
+  border-color: rgba(14, 165, 233, 0.2);
+  box-shadow: 0 2px 12px rgba(14, 165, 233, 0.06);
+}
+
+.da-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 0.75rem 0.875rem;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.da-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.da-day-chip {
+  width: 36px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  transition: all var(--transition-fast);
+}
+
+.da-day-chip--active {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  color: white;
+}
+
+.da-day-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: var(--font-heading);
+}
+
+.da-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.da-count {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--info-bg);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-full);
+}
+
+.da-count--meal {
+  color: var(--secondary);
+  background: rgba(139, 92, 246, 0.1);
+}
+
+.da-chevron {
+  color: var(--text-muted);
+  transition: transform var(--transition-fast);
+}
+
+.da--open .da-chevron {
+  transform: rotate(90deg);
+}
+
+.da-body {
+  padding: 0 0.875rem 0.875rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+/* Copy row */
+.da-copy {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--glass-border);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.da-copy-btn {
+  background: var(--bg-primary);
+  border: 1px solid var(--glass-border);
+  color: var(--primary);
+  cursor: pointer;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.da-copy-btn:active {
+  transform: scale(0.95);
+  background: var(--info-bg);
+}
+
+/* ========================================
+   COMPACT EXERCISE LIST (cel-)
+   ======================================== */
+.cel {
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.cel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.cel-header-label {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.cel-header-label svg {
+  color: var(--primary);
+}
+
+.cel-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: none;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--primary);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.25rem 0.625rem;
+  cursor: pointer;
+  min-height: 28px;
+  transition: all var(--transition-fast);
+}
+
+.cel-add-btn:active {
+  transform: scale(0.95);
+  background: var(--info-bg);
+}
+
+/* Empty state */
+.cel-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.875rem;
+  border: 1.5px dashed var(--glass-border);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.cel-empty:active {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--info-bg);
+}
+
+/* Exercise list */
+.cel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.cel-row {
+  display: flex;
+  gap: 0.375rem;
+  align-items: stretch;
+  background: var(--bg-primary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 0.5rem;
+  transition: border-color var(--transition-fast);
+}
+
+.cel-row:focus-within {
+  border-color: rgba(14, 165, 233, 0.3);
+}
+
+.cel-row-grip {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  opacity: 0.4;
+  padding: 0 0.125rem;
+}
+
+.cel-row-fields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.cel-row-top {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.cel-input-name {
+  flex: 1;
+  border: none !important;
+  background: none !important;
+  padding: 0 !important;
+  min-height: 0 !important;
+  height: 24px !important;
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
+  color: var(--text-primary) !important;
+  box-shadow: none !important;
+}
+
+.cel-input-name::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.cel-remove {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding: 0;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.cel-remove:hover, .cel-remove:active {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.cel-row-bottom {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.cel-input-sm {
+  flex: 1;
+  min-height: 28px !important;
+  padding: 0.25rem 0.5rem !important;
+  font-size: 0.75rem !important;
+  border-radius: var(--radius-sm) !important;
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--glass-border) !important;
+}
+
+/* ========================================
+   INLINE MEAL EDITOR (ime-)
+   ======================================== */
+.ime {
+  border-radius: var(--radius);
+}
+
+/* Type picker */
+.ime-type-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.625rem;
+}
+
+.ime-type-btn {
+  padding: 0.375rem 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.ime-type-btn:active {
+  background: var(--info-bg);
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: scale(0.95);
+}
+
+/* Empty state */
+.ime-empty {
+  padding: 0.375rem 0;
+}
+
+.ime-empty-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.ime-quick-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  border: 1.5px dashed var(--glass-border);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.ime-quick-btn:active {
+  border-color: var(--secondary);
+  color: var(--secondary);
+  background: rgba(139, 92, 246, 0.06);
+}
+
+/* Groups */
+.ime-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ime-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.ime-group-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--secondary-light);
+  padding-left: 0.125rem;
+}
+
+/* Meal item */
+.ime-item {
+  background: var(--bg-primary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color var(--transition-fast);
+}
+
+.ime-item--open {
+  border-color: rgba(139, 92, 246, 0.25);
+}
+
+.ime-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+  cursor: pointer;
+  gap: 0.5rem;
+}
+
+.ime-item-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.ime-item-name {
+  font-size: 0.8rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ime-item-name--empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.ime-item-cal {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--primary);
+  white-space: nowrap;
+  background: var(--info-bg);
+  padding: 0.05rem 0.375rem;
+  border-radius: var(--radius-full);
+}
+
+.ime-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.ime-item-chevron {
+  color: var(--text-muted);
+  transition: transform var(--transition-fast);
+}
+
+.ime-item--open .ime-item-chevron {
+  transform: rotate(180deg);
+  color: var(--secondary);
+}
+
+/* Expanded fields */
+.ime-item-fields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.375rem;
+  padding: 0.625rem;
+  border-top: 1px solid var(--glass-border);
+  background: var(--bg-secondary);
+}
+
+.ime-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.ime-field--wide {
+  grid-column: 1 / -1;
+}
+
+.ime-field label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  width: auto;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  margin: 0;
+}
+
+.ime-field input {
+  min-height: 32px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  border-radius: var(--radius-sm);
+}
+
+/* ========================================
+   ASSIGN SECTION (as-)
+   ======================================== */
+.as {
+  margin-bottom: 1.5rem;
+}
+
+.as-options {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.as-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.875rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: left;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.as-option:active {
+  transform: scale(0.98);
+}
+
+.as-option--active {
+  border-color: var(--primary);
+  background: var(--info-bg);
+}
+
+.as-radio {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+  color: transparent;
+}
+
+.as-radio--checked {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  border-color: var(--primary);
+  color: white;
+}
+
+.as-option-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: var(--font-heading);
+}
+
+.as-option-desc {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 0.05rem;
+}
+
+.as-members {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.as-member {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  width: 100%;
+  transition: all var(--transition-fast);
+}
+
+.as-member:active {
+  transform: scale(0.98);
+}
+
+.as-member--selected {
+  border-color: rgba(14, 165, 233, 0.3);
+  background: var(--info-bg);
+}
+
+.as-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 2px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+  color: transparent;
+}
+
+.as-check--on {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  border-color: var(--primary);
+  color: white;
+}

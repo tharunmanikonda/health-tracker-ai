@@ -278,14 +278,6 @@ async function createTables() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_mobile_health_metrics_lookup
-      ON mobile_health_metrics(user_id, source, metric_type, start_time, end_time)
-    `);
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_mobile_health_metrics_created
-      ON mobile_health_metrics(user_id, created_at DESC)
-    `);
 
     // AI feed queue - unprocessed health data for AI
     await client.query(`

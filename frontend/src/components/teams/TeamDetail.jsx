@@ -4,7 +4,7 @@ import axios from 'axios'
 import {
   Users, Trophy, Crown, Copy, RefreshCw, Plus,
   ChevronLeft, Settings, UserMinus, LogOut, Eye,
-  Check, X, ChevronRight
+  Check, X, ChevronRight, Calendar, ClipboardList, BarChart3
 } from 'lucide-react'
 import ChallengeCard from './ChallengeCard'
 import CreateChallengeModal from './CreateChallengeModal'
@@ -16,6 +16,7 @@ function TeamDetail() {
   const [team, setTeam] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showCreateChallenge, setShowCreateChallenge] = useState(false)
+  const [plans, setPlans] = useState([])
   const [showSettings, setShowSettings] = useState(false)
   const [editName, setEditName] = useState('')
   const [editDesc, setEditDesc] = useState('')
@@ -24,6 +25,7 @@ function TeamDetail() {
 
   useEffect(() => {
     fetchTeam()
+    fetchPlans()
   }, [teamId])
 
   const fetchTeam = async () => {
@@ -37,6 +39,15 @@ function TeamDetail() {
       if (err.response?.status === 403) navigate('/teams')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchPlans = async () => {
+    try {
+      const res = await axios.get(`/api/teams/${teamId}/plans`)
+      setPlans(res.data)
+    } catch (err) {
+      console.error('Failed to load plans:', err)
     }
   }
 
@@ -237,6 +248,63 @@ function TeamDetail() {
             ))}
           </div>
         </>
+      )}
+
+      {/* Weekly Plans */}
+      <div className="section-header">
+        <h3 className="section-title">
+          <Calendar size={18} /> Weekly Plans
+        </h3>
+        {isLeader && (
+          <button className="btn btn-sm btn-primary" onClick={() => navigate(`/teams/${teamId}/plans/create`)}>
+            <Plus size={14} /> New Plan
+          </button>
+        )}
+      </div>
+
+      {plans.length === 0 ? (
+        <div className="card mb-2" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)' }}>
+          {isLeader ? 'No plans yet — create one!' : 'No plan this week'}
+        </div>
+      ) : isLeader ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+          {plans.map(plan => (
+            <div key={plan.id} className="card" style={{ padding: '0.875rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{plan.title}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Week of {new Date(plan.week_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </div>
+                </div>
+                <button
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => navigate(`/teams/${teamId}/plans/${plan.id}/dashboard`)}
+                  style={{ padding: '0.375rem 0.75rem', minHeight: '32px' }}
+                >
+                  <BarChart3 size={14} /> Dashboard
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div
+          className="card mb-2"
+          onClick={() => navigate(`/teams/${teamId}/plans`)}
+          style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+        >
+          <div>
+            <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>
+              <ClipboardList size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '0.375rem' }} />
+              {plans[0]?.title || "This Week's Plan"}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
+              Tap to view workouts & meals
+            </div>
+          </div>
+          <ChevronRight size={20} style={{ color: 'var(--text-muted)' }} />
+        </div>
       )}
 
       {/* Members */}

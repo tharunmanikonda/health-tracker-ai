@@ -19,6 +19,9 @@ import { AICoach } from './components/AICoach'
 import TeamsPage from './components/teams/TeamsPage'
 import TeamDetail from './components/teams/TeamDetail'
 import ChallengeDetail from './components/teams/ChallengeDetail'
+import WeeklyPlanView from './components/teams/WeeklyPlanView'
+import TrainerDashboard from './components/teams/TrainerDashboard'
+import CreatePlanPage from './components/teams/plan/CreatePlanPage'
 import Profile from './components/Profile'
 
 function AppContent() {
@@ -81,6 +84,9 @@ function AppContent() {
           <Route path="/teams" element={<TeamsPage />} />
           <Route path="/teams/:teamId" element={<TeamDetail />} />
           <Route path="/teams/:teamId/challenges/:challengeId" element={<ChallengeDetail />} />
+          <Route path="/teams/:teamId/plans" element={<WeeklyPlanView />} />
+          <Route path="/teams/:teamId/plans/:planId/dashboard" element={<TrainerDashboard />} />
+          <Route path="/teams/:teamId/plans/create" element={<CreatePlanPage />} />
           <Route path="/insights" element={<Insights />} />
           <Route path="/coach" element={<AICoach />} />
           <Route path="/login" element={<Navigate to="/" replace />} />

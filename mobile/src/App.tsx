@@ -235,7 +235,7 @@ const App: React.FC = () => {
   if (!isInitialized) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" />
+        <StatusBar barStyle="dark-content" />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading...</Text>
         </View>
@@ -264,7 +264,7 @@ const App: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#fff',
   },
   webviewContainer: {
     flex: 1,
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 18,
-    color: '#94a3b8',
+    color: '#666',
   },
   statusBar: {
     flexDirection: 'row',

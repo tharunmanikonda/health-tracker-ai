@@ -249,10 +249,7 @@ export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage}) => 
       )}
       {loading && (
         <View style={styles.loadingContainer}>
-          <View style={styles.loadingLogo}>
-            <Text style={styles.loadingLogoText}>♥</Text>
-          </View>
-          <ActivityIndicator size="large" color="#10B981" />
+          <ActivityIndicator size="large" color="#007AFF" />
           <Text style={styles.loadingText}>Syncing your dashboard...</Text>
         </View>
       )}
@@ -263,7 +260,7 @@ export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage}) => 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#fff',
   },
   webview: {
     flex: 1,
@@ -272,26 +269,12 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0f172a',
-  },
-  loadingLogo: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
-    backgroundColor: '#10B981',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingLogoText: {
-    color: '#f8fafc',
-    fontSize: 34,
-    fontWeight: '700',
-    lineHeight: 36,
+    backgroundColor: '#fff',
   },
   loadingText: {
     fontSize: 16,
-    color: '#94a3b8',
-    marginTop: 10,
+    color: '#666',
+    marginTop: 12,
   },
   errorContainer: {
     flex: 1,
@@ -302,18 +285,18 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#ef4444',
+    color: '#d32f2f',
     marginBottom: 8,
   },
   errorSubtext: {
     fontSize: 14,
-    color: '#94a3b8',
+    color: '#666',
     textAlign: 'center',
     marginBottom: 16,
   },
   retryText: {
     fontSize: 14,
-    color: '#10B981',
+    color: '#007AFF',
   },
 });
 

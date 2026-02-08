@@ -54,17 +54,22 @@ function Insights() {
 
   const { correlations } = insights
 
+  const insightsChartStroke = 'var(--primary)'
+  const insightsSecondaryStroke = 'var(--purple)'
+
   return (
-    <div>
-      <div style={{ marginBottom: '2rem' }}>
-        <h2 style={{ marginBottom: '0.25rem' }}>Insights</h2>
-        <p style={{ color: 'var(--text-muted)' }}>
+    <div className="insights-page">
+      <div className="page-header">
+        <div className="page-header-copy">
+          <h2 className="page-title">Insights</h2>
+          <p className="page-subtitle">
           Your nutrition and recovery trends over time
-        </p>
+          </p>
+        </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid" style={{ marginBottom: '2rem' }}>
+      <div className="grid insights-stats-grid">
         <div className="card">
           <div className="card-header">
             <div className="card-title">
@@ -115,14 +120,14 @@ function Insights() {
       </div>
 
       {/* Charts */}
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
+      <div className="card insights-chart-card">
         <div className="card-header">
           <div className="card-title">
             <Calendar size={16} style={{ display: 'inline', marginRight: '0.5rem' }} />
             Calories vs Recovery (Last 7 Days)
           </div>
         </div>
-        <div style={{ height: '300px', marginTop: '1rem' }}>
+        <div className="insights-chart-wrap insights-chart-tall">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={weekData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -132,8 +137,8 @@ function Insights() {
                 tickFormatter={(date) => new Date(date).toLocaleDateString('en-US', {weekday: 'short'})}
                 fontSize={12}
               />
-              <YAxis yAxisId="left" stroke="#0EA5E9" fontSize={12} />
-              <YAxis yAxisId="right" orientation="right" stroke="#8B5CF6" domain={[0, 100]} fontSize={12} />
+              <YAxis yAxisId="left" stroke={insightsChartStroke} fontSize={12} />
+              <YAxis yAxisId="right" orientation="right" stroke={insightsSecondaryStroke} domain={[0, 100]} fontSize={12} />
               <Tooltip
                 contentStyle={{
                   background: 'var(--glass-bg)',
@@ -149,30 +154,30 @@ function Insights() {
                 yAxisId="left"
                 type="monotone"
                 dataKey="total_calories"
-                stroke="#0EA5E9"
+                stroke={insightsChartStroke}
                 name="Calories"
                 strokeWidth={2}
-                dot={{ fill: '#0EA5E9' }}
+                dot={{ fill: insightsChartStroke }}
               />
               <Line
                 yAxisId="right"
                 type="monotone"
                 dataKey="whoop_recovery"
-                stroke="#8B5CF6"
+                stroke={insightsSecondaryStroke}
                 name="Recovery %"
                 strokeWidth={2}
-                dot={{ fill: '#8B5CF6' }}
+                dot={{ fill: insightsSecondaryStroke }}
               />
             </LineChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
+      <div className="card insights-chart-card">
         <div className="card-header">
           <div className="card-title">Macro Distribution</div>
         </div>
-        <div style={{ height: '250px', marginTop: '1rem' }}>
+        <div className="insights-chart-wrap insights-chart-medium">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={weekData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -194,9 +199,9 @@ function Insights() {
                 }}
               />
               <Legend />
-              <Bar dataKey="total_protein" stackId="a" fill="#10b981" name="Protein (g)" />
-              <Bar dataKey="total_carbs" stackId="a" fill="#0EA5E9" name="Carbs (g)" />
-              <Bar dataKey="total_fat" stackId="a" fill="#8B5CF6" name="Fat (g)" />
+              <Bar dataKey="total_protein" stackId="a" fill="var(--success)" name="Protein (g)" />
+              <Bar dataKey="total_carbs" stackId="a" fill="var(--primary)" name="Carbs (g)" />
+              <Bar dataKey="total_fat" stackId="a" fill="var(--purple)" name="Fat (g)" />
             </BarChart>
           </ResponsiveContainer>
         </div>

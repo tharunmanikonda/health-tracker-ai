@@ -506,6 +506,91 @@ async function createTables() {
       )
     `);
 
+    // Weekly plans - one per team per week
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS weekly_plans (
+        id SERIAL PRIMARY KEY,
+        team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        week_start DATE NOT NULL,
+        created_by INTEGER REFERENCES users(id),
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(team_id, week_start)
+      )
+    `);
+
+    // Plan workouts - exercises per day
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS plan_workouts (
+        id SERIAL PRIMARY KEY,
+        plan_id INTEGER REFERENCES weekly_plans(id) ON DELETE CASCADE,
+        day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+        muscle_group TEXT,
+        exercise_name TEXT NOT NULL,
+        sets INTEGER,
+        reps TEXT,
+        weight_suggestion TEXT,
+        notes TEXT,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Plan meals - food items per day per meal type
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS plan_meals (
+        id SERIAL PRIMARY KEY,
+        plan_id INTEGER REFERENCES weekly_plans(id) ON DELETE CASCADE,
+        day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+        meal_type TEXT NOT NULL CHECK (meal_type IN ('breakfast','lunch','dinner','snack','pre_workout','post_workout')),
+        food_name TEXT NOT NULL,
+        quantity_grams REAL,
+        calories INTEGER,
+        protein REAL,
+        carbs REAL,
+        fat REAL,
+        notes TEXT,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Plan assignments - who gets which plan
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS plan_assignments (
+        id SERIAL PRIMARY KEY,
+        plan_id INTEGER REFERENCES weekly_plans(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        assigned_by INTEGER REFERENCES users(id),
+        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(plan_id, user_id)
+      )
+    `);
+
+    // Plan progress - member workout checks + food logs
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS plan_progress (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        plan_id INTEGER REFERENCES weekly_plans(id) ON DELETE CASCADE,
+        date DATE NOT NULL,
+        workout_item_id INTEGER REFERENCES plan_workouts(id) ON DELETE CASCADE,
+        workout_completed BOOLEAN DEFAULT false,
+        completed_at TIMESTAMP,
+        meal_item_id INTEGER REFERENCES plan_meals(id) ON DELETE CASCADE,
+        actual_food_name TEXT,
+        actual_quantity_grams REAL,
+        actual_calories INTEGER,
+        actual_protein REAL,
+        actual_carbs REAL,
+        actual_fat REAL,
+        food_image_path TEXT,
+        logged_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Create indexes for performance
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_food_logs_user_timestamp ON food_logs(user_id, timestamp);
@@ -529,6 +614,11 @@ async function createTables() {
       CREATE INDEX IF NOT EXISTS idx_team_members_user ON team_members(user_id);
       CREATE INDEX IF NOT EXISTS idx_challenges_team ON challenges(team_id, is_active);
       CREATE INDEX IF NOT EXISTS idx_challenge_progress_challenge ON challenge_progress(challenge_id, date);
+      CREATE INDEX IF NOT EXISTS idx_weekly_plans_team ON weekly_plans(team_id, week_start);
+      CREATE INDEX IF NOT EXISTS idx_plan_workouts_plan ON plan_workouts(plan_id, day_of_week);
+      CREATE INDEX IF NOT EXISTS idx_plan_meals_plan ON plan_meals(plan_id, day_of_week);
+      CREATE INDEX IF NOT EXISTS idx_plan_assignments_user ON plan_assignments(user_id);
+      CREATE INDEX IF NOT EXISTS idx_plan_progress_user_date ON plan_progress(user_id, plan_id, date);
     `);
 
     await client.query('COMMIT');

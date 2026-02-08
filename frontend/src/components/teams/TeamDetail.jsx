@@ -10,6 +10,22 @@ import ChallengeCard from './ChallengeCard'
 import CreateChallengeModal from './CreateChallengeModal'
 import MemberStatsModal from './MemberStatsModal'
 
+const quickPlanTemplates = [
+  { label: '7d Steps', metric_type: 'steps', target_value: 10000, target_unit: 'steps', duration_days: 7 },
+  { label: '7d Burn', metric_type: 'calories_burned', target_value: 500, target_unit: 'kcal', duration_days: 7 },
+  { label: '14d Water', metric_type: 'water_intake', target_value: 2500, target_unit: 'ml', duration_days: 14 }
+]
+
+function formatDateForInput(date) {
+  return date.toISOString().split('T')[0]
+}
+
+function getDatePlusDays(startDate, daysToAdd) {
+  const date = new Date(`${startDate}T00:00:00`)
+  date.setDate(date.getDate() + daysToAdd)
+  return formatDateForInput(date)
+}
+
 function TeamDetail() {
   const { teamId } = useParams()
   const navigate = useNavigate()
@@ -22,6 +38,7 @@ function TeamDetail() {
   const [editDesc, setEditDesc] = useState('')
   const [copied, setCopied] = useState(false)
   const [memberStats, setMemberStats] = useState(null)
+  const [quickCreating, setQuickCreating] = useState('')
 
   useEffect(() => {
     fetchTeam()
@@ -66,14 +83,38 @@ function TeamDetail() {
     }
   }
 
-  const handleCreateChallenge = async (data) => {
+  const createChallenge = async (data, closeModal = true) => {
     try {
       await axios.post(`/api/teams/${teamId}/challenges`, data)
-      setShowCreateChallenge(false)
+      if (closeModal) {
+        setShowCreateChallenge(false)
+      }
       fetchTeam()
+      return true
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to create challenge')
+      return false
     }
+  }
+
+  const handleCreateChallenge = async (data) => createChallenge(data, true)
+
+  const handleQuickCreate = async (template) => {
+    const today = formatDateForInput(new Date())
+    const endDate = getDatePlusDays(today, template.duration_days - 1)
+    const name = `${template.duration_days}-Day ${template.label} (${template.target_value} ${template.target_unit}/day)`
+
+    setQuickCreating(template.label)
+    await createChallenge({
+      name,
+      description: null,
+      metric_type: template.metric_type,
+      target_value: template.target_value,
+      target_unit: template.target_unit,
+      start_date: today,
+      end_date: endDate
+    }, false)
+    setQuickCreating('')
   }
 
   const handleUpdateTeam = async () => {
@@ -207,18 +248,37 @@ function TeamDetail() {
       {/* Active Challenges */}
       <div className="section-header">
         <h3 className="section-title">
-          <Trophy size={18} /> Active Challenges
+          <Trophy size={18} /> Active Plans
         </h3>
         {isLeader && (
           <button className="btn btn-sm btn-primary" onClick={() => setShowCreateChallenge(true)}>
-            <Plus size={14} /> New
+            <Plus size={14} /> New Plan
           </button>
         )}
       </div>
 
       {activeChallenges.length === 0 ? (
-        <div className="card mb-2 text-center text-muted" style={{padding: '1.5rem'}}>
-          No active challenges{isLeader ? ' — create one!' : ' yet'}
+        <div className="card mb-2 challenge-empty-state">
+          <p className="text-center text-muted">
+            No active plans{isLeader ? ' yet' : ''}.
+          </p>
+          {isLeader && (
+            <div className="challenge-quick-actions">
+              {quickPlanTemplates.map((template) => (
+                <button
+                  key={template.label}
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => handleQuickCreate(template)}
+                  disabled={quickCreating.length > 0}
+                >
+                  {quickCreating === template.label ? 'Creating...' : template.label}
+                </button>
+              ))}
+              <button className="btn btn-sm btn-primary" onClick={() => setShowCreateChallenge(true)}>
+                Full Custom
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="teams-list mb-2">
@@ -236,7 +296,7 @@ function TeamDetail() {
       {otherChallenges.length > 0 && (
         <>
           <div className="section-header">
-            <h3 className="section-title" style={{ fontSize: '0.875rem' }}>Past / Upcoming</h3>
+            <h3 className="section-title" style={{ fontSize: '0.875rem' }}>Past / Upcoming Plans</h3>
           </div>
           <div className="teams-list mb-2">
             {otherChallenges.map(c => (

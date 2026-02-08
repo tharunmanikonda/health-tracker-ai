@@ -32,6 +32,19 @@ function TrainerDashboard() {
   const [loading, setLoading] = useState(true)
   const [expandedMember, setExpandedMember] = useState(null)
 
+  const sortedMembers = useMemo(() => {
+    const members = [...(data?.members || [])]
+    members.sort((a, b) => {
+      if (!!a.needs_attention !== !!b.needs_attention) {
+        return a.needs_attention ? -1 : 1
+      }
+      const aCompliance = Number.isFinite(Number(a.overall_compliance)) ? Number(a.overall_compliance) : 101
+      const bCompliance = Number.isFinite(Number(b.overall_compliance)) ? Number(b.overall_compliance) : 101
+      return aCompliance - bCompliance
+    })
+    return members
+  }, [data?.members])
+
   useEffect(() => {
     fetchDashboard()
   }, [teamId, planId])
@@ -61,19 +74,6 @@ function TrainerDashboard() {
   const weekRange = data.week_dates?.length >= 2
     ? `${new Date(data.week_dates[0]).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(data.week_dates[6]).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
     : ''
-
-  const sortedMembers = useMemo(() => {
-    const members = [...(data.members || [])]
-    members.sort((a, b) => {
-      if (!!a.needs_attention !== !!b.needs_attention) {
-        return a.needs_attention ? -1 : 1
-      }
-      const aCompliance = Number.isFinite(Number(a.overall_compliance)) ? Number(a.overall_compliance) : 101
-      const bCompliance = Number.isFinite(Number(b.overall_compliance)) ? Number(b.overall_compliance) : 101
-      return aCompliance - bCompliance
-    })
-    return members
-  }, [data.members])
 
   const summary = data.summary || {}
   const membersCount = summary.total_members ?? sortedMembers.length

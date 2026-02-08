@@ -57,7 +57,10 @@ function AppContent() {
             <div className="header-logo" aria-hidden="true">
               <Activity size={16} />
             </div>
-            <h1>HealthSync</h1>
+            <div className="header-brand-copy">
+              <h1>HealthSync</h1>
+              <p>Your daily fitness overview</p>
+            </div>
           </div>
           <div className="header-actions">
             <button

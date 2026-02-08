@@ -563,9 +563,9 @@ function Dashboard() {
         {/* Calories Burned Card */}
         <div className="stat-card">
           <div className="stat-header">
-            <div className="stat-icon" style={{background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444'}}><Flame size={18} /></div>
+            <div className="stat-icon danger"><Flame size={18} /></div>
             {totalBurned > 0 && (
-              <span className="badge" style={{background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444'}}>
+              <span className="badge badge-danger">
                 {burned_source || ''}
               </span>
             )}
@@ -573,7 +573,7 @@ function Dashboard() {
           <div className="stat-value">{totalBurned > 0 ? Math.round(totalBurned) : '--'}</div>
           <div className="stat-label">Burned</div>
           <div className="progress-bar">
-            <div className="progress-fill" style={{width: `${burnedPercent}%`, background: 'linear-gradient(90deg, #ef4444, #f97316)'}}></div>
+            <div className="progress-fill burn" style={{width: `${burnedPercent}%`}}></div>
           </div>
           <div className="stat-footer">
             {totalBurned > 0 ? `Net: ${Math.round(totals.calories - totalBurned)} cal` : 'Connect device to track'}
@@ -756,14 +756,14 @@ function Dashboard() {
           <div className="timeline">
             {workouts.slice(0, 3).map(workout => (
               <div key={workout.workout_id} className="timeline-item">
-                <div className="timeline-icon" style={{background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b'}}>
+                <div className="timeline-icon warning">
                   <Activity size={20} />
                 </div>
                 <div className="timeline-content">
                   <h4>{workout.sport_name}</h4>
                   <p>{workout.duration_minutes} min • {workout.calories} cal</p>
                 </div>
-                <div className="timeline-value" style={{color: '#f59e0b'}}>
+                <div className="timeline-value warning">
                   {workout.strain?.toFixed(1)}
                 </div>
               </div>

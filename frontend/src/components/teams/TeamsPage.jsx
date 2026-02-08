@@ -56,9 +56,12 @@ function TeamsPage() {
 
   return (
     <div className="teams-page">
-      <div className="section-header">
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>My Teams</h2>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+      <div className="page-header">
+        <div className="page-header-copy">
+          <h2 className="page-title">My Teams</h2>
+          <p className="page-subtitle">Compete and stay accountable with your crew</p>
+        </div>
+        <div className="page-actions">
           <button className="btn btn-sm btn-secondary" onClick={() => setShowJoin(true)}>
             <UserPlus size={16} /> Join
           </button>
@@ -75,7 +78,7 @@ function TeamsPage() {
           </div>
           <h3>No Teams Yet</h3>
           <p>Create a team and invite your friends, or join an existing one with an invite code.</p>
-          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+          <div className="teams-empty-actions">
             <button className="btn btn-secondary" onClick={() => setShowJoin(true)}>
               <UserPlus size={18} /> Join Team
             </button>
@@ -85,32 +88,28 @@ function TeamsPage() {
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div className="teams-list">
           {teams.map(team => (
             <div
               key={team.id}
               className="card"
               onClick={() => navigate(`/teams/${team.id}`)}
-              style={{ cursor: 'pointer' }}
+              style={{cursor: 'pointer'}}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>{team.name}</h3>
-                    {team.my_role === 'leader' && (
-                      <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>
-                        <Crown size={10} style={{ display: 'inline', verticalAlign: 'middle' }} /> Leader
-                      </span>
-                    )}
+              <div className="team-list-row">
+                <div className="team-list-main">
+                  <div className="team-list-title-row">
+                    <h3 className="team-list-title">{team.name}</h3>
+                    {team.my_role === 'leader' && <span className="badge badge-warning team-role-badge"><Crown size={10} /> Leader</span>}
                   </div>
-                  <div style={{ display: 'flex', gap: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    <span><Users size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> {team.member_count} members</span>
+                  <div className="team-list-meta">
+                    <span><Users size={12} /> {team.member_count} members</span>
                     {team.active_challenges > 0 && (
-                      <span><Trophy size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> {team.active_challenges} active</span>
+                      <span><Trophy size={12} /> {team.active_challenges} active</span>
                     )}
                   </div>
                 </div>
-                <ChevronRight size={20} style={{ color: 'var(--text-muted)' }} />
+                <ChevronRight size={20} className="text-muted" />
               </div>
             </div>
           ))}

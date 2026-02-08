@@ -101,10 +101,10 @@ function FoodLog() {
   return (
     <div className="food-log">
       {/* Header */}
-      <div className="section-header">
-        <div>
-          <h2 style={{fontSize: '1.25rem', fontWeight: 600}}>Food Log</h2>
-          <p style={{color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.25rem'}}>
+      <div className="page-header">
+        <div className="page-header-copy">
+          <h2 className="page-title">Food Log</h2>
+          <p className="page-subtitle">
             {logs.length} items • {isToday ? 'Today' : new Date(selectedDate).toLocaleDateString()}
           </p>
         </div>
@@ -119,22 +119,21 @@ function FoodLog() {
 
       {/* Scan Barcode Button */}
       <button
-        className="btn btn-secondary btn-block mb-2"
+        className="btn btn-secondary btn-block mb-2 food-scan-btn"
         onClick={() => navigate('/scan')}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
       >
         <ScanLine size={18} /> Scan Barcode
       </button>
 
       {/* Date Selector */}
-      <div className="card" style={{marginBottom: '1rem', padding: '0.75rem 1rem'}}>
-        <div style={{display: 'flex', alignItems: 'center', gap: '0.75rem'}}>
-          <Calendar size={18} style={{color: 'var(--text-muted)'}} />
+      <div className="card food-date-card">
+        <div className="food-date-row">
+          <Calendar size={18} className="text-muted" />
           <input 
             type="date" 
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            style={{flex: 1, background: 'transparent', border: 'none', padding: 0, minHeight: 'auto'}}
+            className="food-date-input"
           />
           <button 
             className="btn btn-sm btn-secondary"
@@ -147,41 +146,41 @@ function FoodLog() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-4" style={{marginBottom: '1rem'}}>
-        <div className="stat-card" style={{padding: '1rem', textAlign: 'center'}}>
-          <div className="stat-icon orange" style={{margin: '0 auto 0.5rem', width: '32px', height: '32px'}}>
+      <div className="grid grid-4 food-macro-grid">
+        <div className="stat-card food-macro-card">
+          <div className="stat-icon orange food-macro-icon">
             <Flame size={16} />
           </div>
-          <div className="stat-value" style={{fontSize: '1.25rem'}}>{Math.round(totals.calories)}</div>
-          <div className="stat-label" style={{fontSize: '0.65rem'}}>Calories</div>
+          <div className="stat-value food-macro-value">{Math.round(totals.calories)}</div>
+          <div className="stat-label food-macro-label">Calories</div>
         </div>
-        <div className="stat-card" style={{padding: '1rem', textAlign: 'center'}}>
-          <div className="stat-icon green" style={{margin: '0 auto 0.5rem', width: '32px', height: '32px'}}>
+        <div className="stat-card food-macro-card">
+          <div className="stat-icon green food-macro-icon">
             <Dumbbell size={16} />
           </div>
-          <div className="stat-value" style={{fontSize: '1.25rem'}}>{Math.round(totals.protein)}g</div>
-          <div className="stat-label" style={{fontSize: '0.65rem'}}>Protein</div>
+          <div className="stat-value food-macro-value">{Math.round(totals.protein)}g</div>
+          <div className="stat-label food-macro-label">Protein</div>
         </div>
-        <div className="stat-card" style={{padding: '1rem', textAlign: 'center'}}>
-          <div className="stat-icon" style={{margin: '0 auto 0.5rem', width: '32px', height: '32px', background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6'}}>
+        <div className="stat-card food-macro-card">
+          <div className="stat-icon blue food-macro-icon">
             <WheatIcon size={16} />
           </div>
-          <div className="stat-value" style={{fontSize: '1.25rem'}}>{Math.round(totals.carbs)}g</div>
-          <div className="stat-label" style={{fontSize: '0.65rem'}}>Carbs</div>
+          <div className="stat-value food-macro-value">{Math.round(totals.carbs)}g</div>
+          <div className="stat-label food-macro-label">Carbs</div>
         </div>
-        <div className="stat-card" style={{padding: '1rem', textAlign: 'center'}}>
-          <div className="stat-icon" style={{margin: '0 auto 0.5rem', width: '32px', height: '32px', background: 'rgba(168, 85, 247, 0.15)', color: '#a855f7'}}>
+        <div className="stat-card food-macro-card">
+          <div className="stat-icon purple food-macro-icon">
             <Droplets size={16} />
           </div>
-          <div className="stat-value" style={{fontSize: '1.25rem'}}>{Math.round(totals.fat)}g</div>
-          <div className="stat-label" style={{fontSize: '0.65rem'}}>Fat</div>
+          <div className="stat-value food-macro-value">{Math.round(totals.fat)}g</div>
+          <div className="stat-label food-macro-label">Fat</div>
         </div>
       </div>
 
       {/* Add Food Form */}
       {showAddForm && (
-        <div className="card" style={{marginBottom: '1rem'}}>
-          <h3 style={{marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem'}}>
+        <div className="card food-form-card">
+          <h3 className="food-form-title">
             <Utensils size={18} /> Add Food Manually
           </h3>
           <form onSubmit={addFood}>
@@ -279,8 +278,8 @@ function FoodLog() {
               />
             </div>
 
-            <div style={{display: 'flex', gap: '0.75rem', marginTop: '1rem'}}>
-              <button type="submit" className="btn btn-primary" style={{flex: 1}}>
+            <div className="food-form-actions">
+              <button type="submit" className="btn btn-primary food-form-submit">
                 <Plus size={18} /> Add to Log
               </button>
               <button 
@@ -297,21 +296,21 @@ function FoodLog() {
 
       {/* Additional Macros Summary */}
       {(totals.fiber > 0 || totals.sugar > 0 || totals.sodium > 0) && (
-        <div className="card" style={{marginBottom: '1rem'}}>
-          <h4 style={{fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.75rem'}}>Additional Nutrition</h4>
-          <div style={{display: 'flex', gap: '1rem', flexWrap: 'wrap'}}>
+        <div className="card food-extra-card">
+          <h4 className="food-extra-title">Additional Nutrition</h4>
+          <div className="food-extra-chips">
             {totals.fiber > 0 && (
-              <span style={{background: 'var(--bg-secondary)', padding: '0.5rem 0.875rem', borderRadius: '100px', fontSize: '0.875rem'}}>
+              <span className="food-extra-chip">
                 Fiber: {Math.round(totals.fiber)}g
               </span>
             )}
             {totals.sugar > 0 && (
-              <span style={{background: 'var(--bg-secondary)', padding: '0.5rem 0.875rem', borderRadius: '100px', fontSize: '0.875rem'}}>
+              <span className="food-extra-chip">
                 Sugar: {Math.round(totals.sugar)}g
               </span>
             )}
             {totals.sodium > 0 && (
-              <span style={{background: 'var(--bg-secondary)', padding: '0.5rem 0.875rem', borderRadius: '100px', fontSize: '0.875rem'}}>
+              <span className="food-extra-chip">
                 Sodium: {Math.round(totals.sodium)}mg
               </span>
             )}
@@ -321,12 +320,12 @@ function FoodLog() {
 
       {/* Food List */}
       {logs.length === 0 ? (
-        <div className="empty-state" style={{padding: '3rem 1rem'}}>
+        <div className="empty-state food-empty-state">
           <div className="empty-state-icon">
             <Search size={28} />
           </div>
           <h3>No Food Logged {isToday ? 'Yet' : 'This Day'}</h3>
-          <p style={{marginBottom: '1.5rem'}}>
+          <p className="food-empty-text">
             {isToday ? 'Start tracking your nutrition by adding your first meal' : 'No food was logged on this date'}
           </p>
           {isToday && (
@@ -337,7 +336,7 @@ function FoodLog() {
         </div>
       ) : (
         <div className="card">
-          <div style={{display: 'flex', flexDirection: 'column', gap: '0.75rem'}}>
+          <div className="food-list">
             {logs.map(log => (
               <div key={log.id} className="food-log-item">
                 <div className="food-log-info">

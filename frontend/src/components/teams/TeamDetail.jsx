@@ -136,18 +136,18 @@ function TeamDetail() {
   return (
     <div className="team-detail">
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-        <button className="btn btn-icon btn-ghost" onClick={() => navigate('/teams')} style={{ width: '40px', height: '40px', minHeight: '40px', padding: '0.5rem' }}>
+      <div className="page-header page-header-with-back">
+        <button className="btn btn-icon btn-ghost page-back-btn" onClick={() => navigate('/teams')}>
           <ChevronLeft size={20} />
         </button>
-        <div style={{ flex: 1 }}>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>{team.name}</h2>
+        <div className="page-header-copy">
+          <h2 className="page-title">{team.name}</h2>
           {team.description && (
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>{team.description}</p>
+            <p className="page-subtitle">{team.description}</p>
           )}
         </div>
         {isLeader && (
-          <button className="btn btn-icon btn-ghost" onClick={() => setShowSettings(!showSettings)} style={{ width: '40px', height: '40px', minHeight: '40px', padding: '0.5rem' }}>
+          <button className="btn btn-icon btn-ghost page-back-btn" onClick={() => setShowSettings(!showSettings)}>
             <Settings size={18} />
           </button>
         )}
@@ -206,11 +206,11 @@ function TeamDetail() {
       </div>
 
       {activeChallenges.length === 0 ? (
-        <div className="card mb-2" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)' }}>
+        <div className="card mb-2 text-center text-muted" style={{padding: '1.5rem'}}>
           No active challenges{isLeader ? ' — create one!' : ' yet'}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+        <div className="teams-list mb-2">
           {activeChallenges.map(c => (
             <ChallengeCard
               key={c.id}
@@ -227,7 +227,7 @@ function TeamDetail() {
           <div className="section-header">
             <h3 className="section-title" style={{ fontSize: '0.875rem' }}>Past / Upcoming</h3>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+          <div className="teams-list mb-2">
             {otherChallenges.map(c => (
               <ChallengeCard
                 key={c.id}
@@ -246,7 +246,7 @@ function TeamDetail() {
         </h3>
       </div>
       <div className="card">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <div className="teams-list-sm">
           {(team.members || []).map(member => (
             <div key={member.user_id} className="team-member-row">
               <div style={{ flex: 1 }}>

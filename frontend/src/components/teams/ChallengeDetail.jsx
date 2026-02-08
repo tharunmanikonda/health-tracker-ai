@@ -80,20 +80,20 @@ function ChallengeDetail() {
   return (
     <div className="challenge-detail">
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-        <button className="btn btn-icon btn-ghost" onClick={() => navigate(`/teams/${teamId}`)} style={{ width: '40px', height: '40px', minHeight: '40px', padding: '0.5rem' }}>
+      <div className="page-header page-header-with-back">
+        <button className="btn btn-icon btn-ghost page-back-btn" onClick={() => navigate(`/teams/${teamId}`)}>
           <ChevronLeft size={20} />
         </button>
-        <div style={{ flex: 1 }}>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>{challenge.name}</h2>
+        <div className="page-header-copy">
+          <h2 className="page-title">{challenge.name}</h2>
           {challenge.description && (
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>{challenge.description}</p>
+            <p className="page-subtitle">{challenge.description}</p>
           )}
         </div>
       </div>
 
       {/* Challenge Info */}
-      <div className="grid grid-3" style={{ marginBottom: '1rem' }}>
+      <div className="grid grid-3 teams-stats-grid">
         <div className="stat-card" style={{ padding: '0.875rem', textAlign: 'center' }}>
           <div className="stat-icon purple" style={{ margin: '0 auto 0.5rem', width: '32px', height: '32px' }}>
             <Icon size={16} />
@@ -175,7 +175,7 @@ function ChallengeDetail() {
       </div>
 
       {/* Date info */}
-      <div style={{ textAlign: 'center', padding: '1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+      <div className="text-center text-muted" style={{padding: '1rem', fontSize: '0.75rem'}}>
         {new Date(challenge.start_date).toLocaleDateString()} — {new Date(challenge.end_date).toLocaleDateString()}
         {isActive && ` (Day ${daysElapsed} of ${totalDays})`}
       </div>

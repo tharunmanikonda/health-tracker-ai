@@ -163,15 +163,15 @@ export function AICoach() {
 
   const getPriorityStyle = (priority: string) => {
     switch (priority) {
-      case 'high': return { borderColor: 'rgba(239, 68, 68, 0.4)', background: 'rgba(239, 68, 68, 0.1)' };
-      case 'medium': return { borderColor: 'rgba(245, 158, 11, 0.4)', background: 'rgba(245, 158, 11, 0.1)' };
-      case 'low': return { borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.1)' };
+      case 'high': return { borderColor: 'var(--danger)', background: 'var(--danger-bg)' };
+      case 'medium': return { borderColor: 'var(--warning)', background: 'var(--warning-bg)' };
+      case 'low': return { borderColor: 'var(--success)', background: 'var(--success-bg)' };
       default: return { borderColor: 'var(--glass-border)', background: 'var(--glass-bg)' };
     }
   };
 
   return (
-    <div style={{display: 'flex', flexDirection: 'column', height: 'calc(100vh - 140px)', maxWidth: '768px', margin: '0 auto'}}>
+    <div className="coach-page">
       {/* Header */}
       <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', borderBottom: '1px solid var(--glass-border)'}}>
         <div style={{display: 'flex', alignItems: 'center', gap: '0.75rem'}}>
@@ -206,7 +206,7 @@ export function AICoach() {
         <div style={{padding: '0.75rem', background: 'var(--glass-bg)', backdropFilter: 'blur(10px)', borderBottom: '1px solid var(--glass-border)'}}>
           <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem'}}>
             <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 500, fontFamily: 'var(--font-heading)'}}>
-              <Lightbulb style={{width: 16, height: 16, color: '#f59e0b'}} />
+              <Lightbulb style={{width: 16, height: 16, color: 'var(--warning)'}} />
               Today's Insights
             </div>
             <button style={{height: 24, padding: '0 0.5rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer'}} onClick={() => setShowInsights(false)}>
@@ -380,10 +380,10 @@ export function AICoach() {
         {/* Quick actions */}
         <div style={{display: 'flex', gap: '0.5rem', marginTop: '0.75rem', overflowX: 'auto'}}>
           {[
-            { label: 'Recovery', icon: <Heart style={{width: 12, height: 12, color: '#ef4444'}} />, msg: "How's my recovery today?" },
+            { label: 'Recovery', icon: <Heart style={{width: 12, height: 12, color: 'var(--danger)'}} />, msg: "How's my recovery today?" },
             { label: 'Nutrition', icon: <Utensils style={{width: 12, height: 12, color: 'var(--orange)'}} />, msg: "Am I hitting my nutrition goals?" },
             { label: 'Sleep', icon: <Moon style={{width: 12, height: 12, color: 'var(--primary)'}} />, msg: "How did I sleep last night?" },
-            { label: 'Meal Ideas', icon: <Flame style={{width: 12, height: 12, color: '#f59e0b'}} />, msg: "What should I eat for dinner?" },
+            { label: 'Meal Ideas', icon: <Flame style={{width: 12, height: 12, color: 'var(--warning)'}} />, msg: "What should I eat for dinner?" },
             { label: 'Tips', icon: <TrendingUp style={{width: 12, height: 12, color: 'var(--accent)'}} />, msg: "How can I improve my health?" }
           ].map((action, i) => (
             <button

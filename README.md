@@ -13,6 +13,12 @@ A comprehensive health tracking web app that integrates with WHOOP for biometric
 - **Dashboard**: Daily overview of calories, macros, and WHOOP metrics
 - **Insights**: Correlation analysis between nutrition and recovery
 
+## Product Planning Docs
+
+- Mobile-first planning playbook: `MOBILE_FIRST_SCREEN_PLANNING_PLAYBOOK.md`
+- Per-screen spec template: `SCREEN_SPEC_TEMPLATE.md`
+- Filled v1 screen specs (Home/Planner/Scan): `SCREEN_SPECS_V1.md`
+
 ## Tech Stack
 
 - **Backend**: Node.js, Express, PostgreSQL

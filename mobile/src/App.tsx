@@ -15,13 +15,14 @@ import {
   AppState,
   useColorScheme,
 } from 'react-native';
-import {WebAppContainer} from './components/WebAppContainer';
 import {NativeBarcodeScanner} from './components/NativeBarcodeScanner';
+import MobilePriorityShell from './components/MobilePriorityShell';
 import {healthSyncService} from './services/healthSync';
 import {databaseService} from './services/database';
 import {backgroundTaskService, headlessTask} from './services/backgroundTask';
 import {webhookService} from './services/webhook';
 import {backendSyncService} from './services/backendSync';
+import {analyticsService} from './services/analytics';
 import {getDeviceInfo} from './utils/helpers';
 
 // Register Android headless task
@@ -39,7 +40,6 @@ const App: React.FC = () => {
   const [showPermissionPrompt, setShowPermissionPrompt] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
-  const [webViewNavigateTo, setWebViewNavigateTo] = useState<string | null>(null);
   const lastForegroundRefreshRef = useRef(0);
   const [todaySummary, setTodaySummary] = useState({
     steps: 0,
@@ -114,14 +114,36 @@ const App: React.FC = () => {
 
   // Request health permissions
   const requestPermissions = async () => {
+    const startedAt = Date.now();
+    analyticsService.track('primary_action_tapped', {
+      screen_id: 'M-SET',
+      flow_id: 'F-SET',
+      action: 'request_permissions',
+      source: 'manual',
+    });
     try {
       const granted = await healthSyncService.requestPermissions();
       setHasPermissions(granted);
       setShowPermissionPrompt(false);
       
       if (granted) {
+        analyticsService.track('action_succeeded', {
+          screen_id: 'M-SET',
+          flow_id: 'F-SET',
+          action: 'request_permissions',
+          source: 'manual',
+          latency_ms: Date.now() - startedAt,
+        });
         performInitialSync();
       } else {
+        analyticsService.track('action_failed', {
+          screen_id: 'M-SET',
+          flow_id: 'F-SET',
+          action: 'request_permissions',
+          source: 'manual',
+          latency_ms: Date.now() - startedAt,
+          error_message: 'permissions_not_granted',
+        });
         Alert.alert(
           'Permissions Required',
           'Health permissions are needed to sync your health data. You can enable them later in Settings.',
@@ -130,12 +152,21 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error('[App] Permission request failed:', error);
+      analyticsService.track('action_failed', {
+        screen_id: 'M-SET',
+        flow_id: 'F-SET',
+        action: 'request_permissions',
+        source: 'manual',
+        latency_ms: Date.now() - startedAt,
+        error_message: String(error),
+      });
       Alert.alert('Error', 'Failed to request health permissions');
     }
   };
 
   // Perform initial sync
   const performInitialSync = async () => {
+    const startedAt = Date.now();
     try {
       setIsSyncing(true);
       console.log('[App] Performing initial sync...');
@@ -151,8 +182,23 @@ const App: React.FC = () => {
       await backendSyncService.syncToBackend();
       
       console.log('[App] Initial sync complete');
+      analyticsService.track('action_succeeded', {
+        screen_id: 'M-HOME',
+        flow_id: 'F-003',
+        action: 'initial_sync',
+        source: 'background',
+        latency_ms: Date.now() - startedAt,
+      });
     } catch (error) {
       console.error('[App] Initial sync failed:', error);
+      analyticsService.track('action_failed', {
+        screen_id: 'M-HOME',
+        flow_id: 'F-003',
+        action: 'initial_sync',
+        source: 'background',
+        latency_ms: Date.now() - startedAt,
+        error_message: String(error),
+      });
     } finally {
       setIsSyncing(false);
     }
@@ -160,20 +206,37 @@ const App: React.FC = () => {
 
   // Foreground refresh to keep data fresh when user re-opens app
   async function refreshOnForeground() {
+    const startedAt = Date.now();
     try {
       console.log('[App] Foreground refresh...');
       await healthSyncService.syncHealthData(1, { preferIncremental: true });
       await backendSyncService.syncToBackend();
       const summary = await healthSyncService.getTodaySummary();
       setTodaySummary(summary);
+      analyticsService.track('action_succeeded', {
+        screen_id: 'M-HOME',
+        flow_id: 'F-003',
+        action: 'foreground_refresh',
+        source: 'foreground',
+        latency_ms: Date.now() - startedAt,
+      });
     } catch (error) {
       console.warn('[App] Foreground refresh failed:', error);
+      analyticsService.track('action_failed', {
+        screen_id: 'M-HOME',
+        flow_id: 'F-003',
+        action: 'foreground_refresh',
+        source: 'foreground',
+        latency_ms: Date.now() - startedAt,
+        error_message: String(error),
+      });
     }
   }
 
   // Manual sync handler
   const handleManualSync = useCallback(async () => {
     if (isSyncing) return;
+    const startedAt = Date.now();
     
     try {
       setIsSyncing(true);
@@ -182,45 +245,58 @@ const App: React.FC = () => {
       
       const summary = await healthSyncService.getTodaySummary();
       setTodaySummary(summary);
-      
-      Alert.alert('Sync Complete', `Synced ${data.metrics.length + data.workouts.length + data.sleep.length} records`);
+
+      const syncedRecords = data.metrics.length + data.workouts.length + data.sleep.length;
+      analyticsService.track('action_succeeded', {
+        screen_id: 'M-HOME',
+        flow_id: 'F-003',
+        action: 'manual_sync',
+        source: 'manual',
+        latency_ms: Date.now() - startedAt,
+        synced_records: syncedRecords,
+      });
+
+      Alert.alert('Sync Complete', `Synced ${syncedRecords} records`);
     } catch (error) {
+      analyticsService.track('action_failed', {
+        screen_id: 'M-HOME',
+        flow_id: 'F-003',
+        action: 'manual_sync',
+        source: 'manual',
+        latency_ms: Date.now() - startedAt,
+        error_message: String(error),
+      });
       Alert.alert('Sync Failed', String(error));
+      throw error;
     } finally {
       setIsSyncing(false);
     }
   }, [isSyncing]);
 
-  // Handle scan request from WebView
-  const handleScanRequested = useCallback(() => {
-    console.log('[App] Native scanner requested');
+  // Open native scanner from any native screen
+  const handleOpenScanner = useCallback(() => {
     setShowScanner(true);
-  }, []);
-
-  // Handle messages from WebView
-  const handleWebViewMessage = useCallback((message: any) => {
-    console.log('[App] Message from WebView:', message);
-
-    // Handle any app-level message processing here
-    switch (message.type) {
-      case 'health_data':
-        // Update UI with new health data
-        break;
-    }
   }, []);
 
   // Permission prompt overlay
   const renderPermissionPrompt = () => {
     if (!showPermissionPrompt) return null;
 
+    const promptCardBg = isDarkMode ? '#111827' : '#FFFFFF';
+    const promptTitleColor = isDarkMode ? '#F8FAFC' : '#0F172A';
+    const promptBodyColor = isDarkMode ? '#CBD5E1' : '#334155';
+    const promptMutedColor = isDarkMode ? '#94A3B8' : '#64748B';
+    const promptBorderColor = isDarkMode ? 'rgba(148,163,184,0.25)' : 'rgba(15,23,42,0.12)';
+    const promptSecondaryColor = isDarkMode ? '#93C5FD' : '#2563EB';
+
     return (
       <View style={styles.permissionOverlay}>
-        <View style={styles.permissionCard}>
-          <Text style={styles.permissionTitle}>Enable Health Access</Text>
-          <Text style={styles.permissionText}>
+        <View style={[styles.permissionCard, {backgroundColor: promptCardBg, borderColor: promptBorderColor}]}>
+          <Text style={[styles.permissionTitle, {color: promptTitleColor}]}>Enable Health Access</Text>
+          <Text style={[styles.permissionText, {color: promptBodyColor}]}>
             HealthSync needs access to your health data to provide insights and sync with your dashboard.
           </Text>
-          <Text style={styles.permissionSubtext}>
+          <Text style={[styles.permissionSubtext, {color: promptMutedColor}]}>
             We can access: Steps, Heart Rate, Sleep, Workouts, and Calories
           </Text>
           <View style={styles.permissionButtons}>
@@ -234,41 +310,10 @@ const App: React.FC = () => {
               style={styles.permissionButton}
               onPress={() => setShowPermissionPrompt(false)}
             >
-              <Text style={styles.permissionButtonText}>Not Now</Text>
+              <Text style={[styles.permissionButtonText, {color: promptSecondaryColor}]}>Not Now</Text>
             </TouchableOpacity>
           </View>
         </View>
-      </View>
-    );
-  };
-
-  // Sync status bar
-  const renderSyncStatus = () => {
-    if (!hasPermissions) return null;
-
-    return (
-      <View style={styles.statusBar}>
-        <View style={styles.statusItem}>
-          <Text style={styles.statusValue}>{todaySummary.steps.toLocaleString()}</Text>
-          <Text style={styles.statusLabel}>Steps</Text>
-        </View>
-        <View style={styles.statusItem}>
-          <Text style={styles.statusValue}>{Math.round(todaySummary.activeCalories)}</Text>
-          <Text style={styles.statusLabel}>Cal</Text>
-        </View>
-        <View style={styles.statusItem}>
-          <Text style={styles.statusValue}>{todaySummary.workouts}</Text>
-          <Text style={styles.statusLabel}>Workouts</Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.syncButton, isSyncing && styles.syncButtonActive]}
-          onPress={handleManualSync}
-          disabled={isSyncing}
-        >
-          <Text style={styles.syncButtonText}>
-            {isSyncing ? '⟳' : '↻'}
-          </Text>
-        </TouchableOpacity>
       </View>
     );
   };
@@ -285,14 +330,15 @@ const App: React.FC = () => {
     <View style={[styles.container, {backgroundColor: appBackground}]}>
       <StatusBar barStyle={statusBarStyle} />
 
-      {/* Main WebView - full screen edge-to-edge */}
-      <View style={styles.webviewContainer}>
-        <WebAppContainer
-          onMessage={handleWebViewMessage}
-          onScanRequested={handleScanRequested}
-          navigateTo={webViewNavigateTo}
-        />
-      </View>
+      <MobilePriorityShell
+        isDarkMode={isDarkMode}
+        hasPermissions={hasPermissions}
+        isSyncing={isSyncing}
+        todaySummary={todaySummary}
+        onManualSync={handleManualSync}
+        onRequestPermissions={requestPermissions}
+        onOpenScanner={handleOpenScanner}
+      />
 
       {/* Native Barcode Scanner - full screen overlay with own safe areas */}
       {showScanner && (
@@ -301,8 +347,7 @@ const App: React.FC = () => {
             onClose={() => setShowScanner(false)}
             onFoodLogged={() => {
               console.log('[App] Food logged via native scanner');
-              // Navigate to dashboard and trigger refresh
-              setWebViewNavigateTo('/?' + Date.now());
+              setShowScanner(false);
             }}
           />
         </View>
@@ -319,53 +364,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0B1121',
   },
-  webviewContainer: {
-    flex: 1,
-  },
   scannerOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 100,
-  },
-  statusBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#111827',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
-  statusItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statusValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#F1F5F9',
-  },
-  statusLabel: {
-    fontSize: 11,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  syncButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  syncButtonActive: {
-    backgroundColor: '#0056b3',
-    opacity: 0.7,
-  },
-  syncButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   permissionOverlay: {
     ...StyleSheet.absoluteFillObject,

@@ -253,14 +253,21 @@ async function createTables() {
         id SERIAL PRIMARY KEY,
         user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
         whoop_api_key TEXT,
-        daily_calorie_goal INTEGER DEFAULT 2500,
-        daily_protein_goal INTEGER DEFAULT 150,
         whatsapp_number TEXT,
         whoop_access_token TEXT,
         whoop_refresh_token TEXT,
         whoop_token_expiry BIGINT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+    // Single source of truth: goals are stored on users, not user_settings.
+    await client.query(`
+      ALTER TABLE user_settings
+      DROP COLUMN IF EXISTS daily_calorie_goal
+    `);
+    await client.query(`
+      ALTER TABLE user_settings
+      DROP COLUMN IF EXISTS daily_protein_goal
     `);
 
     // Mobile health metrics (from HealthKit / Health Connect)

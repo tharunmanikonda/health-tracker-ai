@@ -3033,6 +3033,88 @@ a:focus-visible {
   padding: 1rem;
 }
 
+.td-root {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.td-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 0.25rem;
+}
+
+.td-stat-pill {
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  border-radius: var(--radius);
+  padding: 0.55rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-height: 56px;
+}
+
+.td-stat-label {
+  font-size: 0.67rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.td-stat-value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.td-member-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.td-member-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.td-member-name {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.td-attention-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  padding: 0.18rem 0.48rem;
+  border-radius: var(--radius-full);
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid rgba(255, 69, 58, 0.28);
+}
+
+.td-member-metrics {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.td-member-metric {
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+}
+
 .trainer-week-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -3043,6 +3125,40 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+.td-split-cell {
+  width: 100%;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+}
+
+.td-split-half {
+  flex: 1;
+}
+
+.td-workout-complete,
+.td-nutrition-complete {
+  background: var(--success);
+}
+
+.td-workout-partial,
+.td-nutrition-partial {
+  background: var(--warning);
+}
+
+.td-workout-missed,
+.td-nutrition-missed {
+  background: rgba(255, 69, 58, 0.38);
+}
+
+.td-workout-na,
+.td-nutrition-na {
+  background: var(--bg-tertiary);
 }
 
 .trainer-day-cell {
@@ -3063,6 +3179,112 @@ a:focus-visible {
 
 .trainer-day-cell.empty {
   background: var(--bg-tertiary);
+}
+
+.td-summary-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.td-day-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.45rem 0;
+  font-size: 0.8rem;
+}
+
+.td-day-label {
+  width: 30px;
+  font-weight: 500;
+}
+
+.td-day-detail-main {
+  flex: 1;
+}
+
+.td-day-detail-nutrition {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.22rem;
+}
+
+.td-text-complete {
+  color: var(--success);
+}
+
+.td-text-partial {
+  color: var(--warning);
+}
+
+.td-text-missed {
+  color: var(--danger);
+}
+
+.td-text-muted {
+  color: var(--text-muted);
+}
+
+.td-macro-chip-row {
+  display: flex;
+  gap: 0.24rem;
+}
+
+.td-macro-chip {
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-full);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 0.62rem;
+  padding: 0.1rem 0.4rem;
+  font-weight: 600;
+}
+
+.td-weekly-nutrition {
+  margin-top: 0.9rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--glass-border);
+}
+
+.td-weekly-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin-bottom: 0.55rem;
+}
+
+.td-macro-row {
+  margin-bottom: 0.45rem;
+}
+
+.td-macro-row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.22rem;
+}
+
+.td-progress-track {
+  width: 100%;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--bg-tertiary);
+  overflow: hidden;
+}
+
+.td-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+}
+
+@media (max-width: 640px) {
+  .td-stats-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* ========================================

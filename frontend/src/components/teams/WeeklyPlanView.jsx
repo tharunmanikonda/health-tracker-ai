@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { ChevronLeft, UtensilsCrossed } from 'lucide-react'
+import { ChevronLeft, UtensilsCrossed, Watch } from 'lucide-react'
 import WeekTabs from './plan/WeekTabs'
 import WorkoutList from './plan/WorkoutList'
 import MealPlanSection from './plan/MealPlanSection'
@@ -18,6 +18,7 @@ function WeeklyPlanView() {
     return today === 0 ? 6 : today - 1
   })
   const [logMealItem, setLogMealItem] = useState(null)
+  const [wearableActivity, setWearableActivity] = useState(null)
 
   const todayDayIndex = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1
 
@@ -50,6 +51,15 @@ function WeeklyPlanView() {
     data.progress.filter(p => (typeof p.date === 'string' ? p.date.split('T')[0] : '') === selectedDateStr),
     [data.progress, selectedDateStr]
   )
+
+  // Fetch wearable activity for the selected date
+  useEffect(() => {
+    if (!data.plan || !selectedDateStr) return
+    setWearableActivity(null)
+    axios.get(`/api/teams/${teamId}/plans/${data.plan.id}/wearable-activity/${selectedDateStr}`)
+      .then(res => setWearableActivity(res.data.workouts || []))
+      .catch(() => setWearableActivity(null))
+  }, [data.plan?.id, selectedDateStr, teamId])
 
   const isWorkoutCompleted = (id) => dayProgress.some(p => p.workout_item_id === id && p.workout_completed)
 
@@ -103,6 +113,26 @@ function WeeklyPlanView() {
 
       {dayWorkouts.length === 0 && dayMeals.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', marginTop: '1rem' }}>Rest Day</div>
+      )}
+
+      {wearableActivity && wearableActivity.length > 0 && dayWorkouts.length > 0 &&
+        dayWorkouts.some(w => !isWorkoutCompleted(w.id)) && (
+        <div className="td-wearable-banner">
+          <Watch size={16} />
+          <span>
+            Apple Watch detected a {(() => {
+              const w = wearableActivity[0]
+              const meta = w.metadata || {}
+              const dur = w.start_time && w.end_time
+                ? Math.round((new Date(w.end_time) - new Date(w.start_time)) / 60000)
+                : null
+              const parts = []
+              if (dur) parts.push(`${dur}min`)
+              if (meta.workoutType) parts.push(meta.workoutType.replace(/([A-Z])/g, ' $1').trim().toLowerCase())
+              return parts.length > 0 ? parts.join(' ') : ''
+            })()} workout today. Tap exercises to mark complete.
+          </span>
+        </div>
       )}
 
       <WorkoutList workouts={dayWorkouts} isCompleted={isWorkoutCompleted} onToggle={toggleWorkout} />

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { correlateForPlan } = require('../services/workoutVerification');
 
 function safeJson(value) {
   if (value == null) return null;
@@ -24,217 +25,219 @@ function normalizeMobileSource(source) {
   return source;
 }
 
-function isSameMetric(existing, incoming) {
-  if (!existing) return false;
-  const existingValue = Number(existing.value);
-  const incomingValue = Number(incoming.value);
-  if (!Number.isFinite(existingValue) || !Number.isFinite(incomingValue)) return false;
+// Source → table mapping for per-provider routing
+const SAMPLES_TABLE = {
+  apple_healthkit: 'apple_health_samples_ts',
+  health_connect: 'health_connect_samples_ts',
+};
+const WORKOUTS_TABLE = {
+  apple_healthkit: 'apple_health_workouts',
+  health_connect: 'health_connect_workouts',
+};
+const SLEEP_TABLE = {
+  apple_healthkit: 'apple_health_sleep',
+  health_connect: 'health_connect_sleep',
+};
 
-  const existingMetadata = safeJson(existing.metadata);
-  const incomingMetadata = incoming.metadata || null;
-
-  return (
-    existingValue === incomingValue &&
-    (existing.unit || null) === (incoming.unit || null) &&
-    JSON.stringify(existingMetadata || null) === JSON.stringify(incomingMetadata)
-  );
-}
+// Metric types that are continuous samples (go to hypertable)
+const SAMPLE_TYPES = new Set([
+  'heart_rate', 'resting_heart_rate', 'hrv', 'steps', 'active_calories',
+  'basal_calories', 'distance', 'flights_climbed', 'spo2', 'respiratory_rate',
+  'body_temperature',
+]);
 
 // POST /api/mobile/sync - Receive health data from mobile app
+// Routes to per-provider tables: hypertables for samples, regular tables for workouts/sleep
 router.post('/sync', async (req, res) => {
   try {
     const userId = (req.user.userId || req.user.id);
     const { source, metrics } = req.body;
     const normalizedSource = normalizeMobileSource(source);
-    
-    // Validate source
-    const validSources = ['apple_healthkit', 'samsung_health', 'health_connect', 'google_fit', 'fitbit', 'google_wear_os'];
+
+    // Validate source — only Apple Health and Health Connect sync via mobile
+    const validSources = ['apple_healthkit', 'health_connect'];
     if (!validSources.includes(normalizedSource)) {
-      return res.status(400).json({ error: 'Invalid source' });
+      return res.status(400).json({ error: 'Invalid source. Use apple_healthkit or health_connect.' });
     }
-    
+
     if (!Array.isArray(metrics) || metrics.length === 0) {
       return res.status(400).json({ error: 'No metrics provided' });
     }
-    
-    const insertedIds = [];
-    
-    for (const metric of metrics) {
-      if (!metric?.type || metric?.value == null) continue;
 
-      const startTime = metric.startTime || null;
-      const endTime = metric.endTime || null;
-      const metadata = metric.metadata || null;
+    // Filter valid metrics
+    const validMetrics = metrics.filter(m => m?.type && m?.value != null && m?.startTime);
+    if (validMetrics.length === 0) {
+      return res.status(400).json({ error: 'No valid metrics (each needs type, value, startTime)' });
+    }
 
-      const existing = await db.get(
-        `SELECT id, value, unit, metadata
-         FROM mobile_health_metrics
-         WHERE user_id = $1
-           AND source = $2
-           AND metric_type = $3
-           AND start_time IS NOT DISTINCT FROM $4::timestamp
-           AND end_time IS NOT DISTINCT FROM $5::timestamp
-         LIMIT 1`,
-        [userId, normalizedSource, metric.type, startTime, endTime]
-      );
+    let insertedCount = 0;
 
-      if (isSameMetric(existing, metric)) {
-        insertedIds.push(existing.id);
-        continue;
+    // Split metrics by destination
+    const sampleMetrics = validMetrics.filter(m => SAMPLE_TYPES.has(m.type));
+    const workoutMetrics = validMetrics.filter(m => m.type === 'workout');
+    const sleepMetrics = validMetrics.filter(m => m.type === 'sleep');
+
+    // 1. Batch insert continuous samples into provider-specific hypertable
+    const samplesTable = SAMPLES_TABLE[normalizedSource];
+    const BATCH_SIZE = 1000;
+
+    for (let i = 0; i < sampleMetrics.length; i += BATCH_SIZE) {
+      const batch = sampleMetrics.slice(i, i + BATCH_SIZE);
+      const values = [];
+      const params = [];
+      let paramIdx = 1;
+
+      for (const metric of batch) {
+        values.push(`($${paramIdx}, $${paramIdx+1}, $${paramIdx+2}, $${paramIdx+3}, $${paramIdx+4}, $${paramIdx+5})`);
+        params.push(
+          metric.startTime,                                         // time
+          userId,                                                    // user_id
+          metric.type,                                               // metric_type
+          Number(metric.value),                                      // value
+          metric.unit || null,                                       // unit
+          metric.metadata ? JSON.stringify(metric.metadata) : null   // metadata
+        );
+        paramIdx += 6;
       }
 
-      if (existing?.id) {
-        await db.run('DELETE FROM mobile_health_metrics WHERE id = $1', [existing.id]);
-      }
-
-      const result = await db.run(
-        `INSERT INTO mobile_health_metrics 
-         (user_id, source, metric_type, value, unit, start_time, end_time, metadata)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-        [
-          userId,
-          normalizedSource,
-          metric.type,
-          Number(metric.value),
-          metric.unit || null,
-          startTime,
-          endTime,
-          metadata ? JSON.stringify(metadata) : null
-        ]
+      const result = await db.query(
+        `INSERT INTO ${samplesTable} (time, user_id, metric_type, value, unit, metadata)
+         VALUES ${values.join(', ')}
+         ON CONFLICT (user_id, metric_type, time) DO NOTHING`,
+        params
       );
-      
-      insertedIds.push(result.id);
-      
-      // Add to AI feed queue
+      insertedCount += result.rowCount || 0;
+    }
+
+    // 2. Insert workouts into provider-specific workout table
+    const workoutsTable = WORKOUTS_TABLE[normalizedSource];
+    for (const wk of workoutMetrics) {
+      const meta = wk.metadata || {};
+      const isApple = normalizedSource === 'apple_healthkit';
+      try {
+        const result = await db.query(
+          `INSERT INTO ${workoutsTable}
+           (user_id, workout_type, start_time, end_time, duration_seconds, ${isApple ? 'total_calories, active_calories, distance_meters, avg_heart_rate, max_heart_rate,' : 'total_calories,'} metadata)
+           VALUES ($1, $2, $3, $4, $5, ${isApple ? '$6, $7, $8, $9, $10, $11' : '$6, $7'})
+           ON CONFLICT (user_id, workout_type, start_time) DO NOTHING`,
+          isApple ? [
+            userId,
+            meta.workoutType || meta.workout_type || 'Unknown',
+            wk.startTime,
+            wk.endTime || null,
+            meta.duration || null,
+            meta.totalCalories || meta.total_calories || Number(wk.value) || null,
+            meta.activeCalories || meta.active_calories || null,
+            meta.distance || meta.distance_meters || null,
+            meta.avgHeartRate || meta.avg_heart_rate || null,
+            meta.maxHeartRate || meta.max_heart_rate || null,
+            JSON.stringify(meta),
+          ] : [
+            userId,
+            meta.workoutType || meta.workout_type || 'Unknown',
+            wk.startTime,
+            wk.endTime || null,
+            meta.duration || null,
+            meta.totalCalories || meta.total_calories || Number(wk.value) || null,
+            JSON.stringify(meta),
+          ]
+        );
+        insertedCount += result.rowCount || 0;
+      } catch (e) { /* duplicate, skip */ }
+    }
+
+    // 3. Insert sleep sessions into provider-specific sleep table
+    const sleepTable = SLEEP_TABLE[normalizedSource];
+    for (const sl of sleepMetrics) {
+      const meta = sl.metadata || {};
+      const isApple = normalizedSource === 'apple_healthkit';
+      try {
+        const result = await db.query(
+          `INSERT INTO ${sleepTable}
+           (user_id, start_time, end_time, total_hours${isApple ? ', deep_hours, rem_hours, core_hours, awake_hours' : ''}, metadata)
+           VALUES ($1, $2, $3, $4${isApple ? ', $5, $6, $7, $8, $9' : ', $5'})
+           ON CONFLICT (user_id, start_time) DO NOTHING`,
+          isApple ? [
+            userId,
+            sl.startTime,
+            sl.endTime || null,
+            Number(sl.value) || null,
+            meta.deepHours || meta.deep_hours || null,
+            meta.remHours || meta.rem_hours || null,
+            meta.coreHours || meta.core_hours || null,
+            meta.awakeHours || meta.awake_hours || null,
+            JSON.stringify(meta),
+          ] : [
+            userId,
+            sl.startTime,
+            sl.endTime || null,
+            Number(sl.value) || null,
+            JSON.stringify(meta),
+          ]
+        );
+        insertedCount += result.rowCount || 0;
+      } catch (e) { /* duplicate, skip */ }
+    }
+
+    // AI feed queue — one entry per sync batch
+    if (insertedCount > 0) {
+      const typeSummary = {};
+      validMetrics.forEach(m => { typeSummary[m.type] = (typeSummary[m.type] || 0) + 1; });
       await db.run(
         `INSERT INTO ai_feed_queue (user_id, source_table, source_id, data_type, data_json)
-         VALUES ($1, 'mobile_health_metrics', $2, $3, $4)`,
+         VALUES ($1, $2, 0, 'health_sync', $3)`,
         [
           userId,
-          result.id,
-          metric.type,
+          samplesTable,
           JSON.stringify({
             source: normalizedSource,
-            type: metric.type,
-            value: metric.value,
-            unit: metric.unit,
-            startTime: metric.startTime,
-            endTime: metric.endTime,
+            metrics_count: insertedCount,
+            types: typeSummary,
             timestamp: new Date().toISOString()
           })
         ]
       );
-      
-      // Log webhook event
+
       await db.run(
         `INSERT INTO webhook_events (user_id, event_type, payload)
          VALUES ($1, 'health_data_changed', $2)`,
         [
           userId,
-          JSON.stringify({ source: normalizedSource, type: metric.type, value: metric.value })
+          JSON.stringify({ source: normalizedSource, metrics_count: insertedCount, types: Object.keys(typeSummary) })
         ]
       );
     }
-    
+
+    // Trigger workout verification if workout data was synced
+    if (workoutMetrics.length > 0) {
+      try {
+        const activePlans = await db.all(
+          `SELECT wp.id FROM weekly_plans wp
+           JOIN plan_assignments pa ON pa.plan_id = wp.id
+           WHERE (pa.user_id = $1 OR pa.user_id IS NULL)
+             AND wp.week_start <= CURRENT_DATE
+             AND wp.week_start + INTERVAL '7 days' > CURRENT_DATE
+             AND wp.is_active = true`,
+          [userId]
+        );
+        for (const plan of activePlans) {
+          await correlateForPlan(userId, plan.id);
+        }
+      } catch (verifyErr) {
+        console.error('Workout verification error (non-blocking):', verifyErr);
+      }
+    }
+
     res.json({
       success: true,
-      message: `Synced ${insertedIds.length} metrics`,
-      insertedIds
+      message: `Synced ${insertedCount} metrics (${validMetrics.length} received, duplicates skipped)`,
+      inserted: insertedCount,
+      received: validMetrics.length
     });
-    
+
   } catch (err) {
     console.error('Mobile health sync error:', err);
     res.status(500).json({ error: 'Failed to sync health data' });
-  }
-});
-
-// GET /api/mobile/health/latest - Get latest health metrics
-router.get('/latest', async (req, res) => {
-  try {
-    const userId = (req.user.userId || req.user.id);
-    const { since, types } = req.query;
-    
-    let query = `
-      SELECT * FROM mobile_health_metrics 
-      WHERE user_id = $1
-    `;
-    const params = [userId];
-    
-    if (since) {
-      query += ` AND created_at > $${params.length + 1}`;
-      params.push(since);
-    }
-    
-    if (types) {
-      const typeList = types.split(',');
-      query += ` AND metric_type IN (${typeList.map((_, i) => `$${params.length + i + 1}`).join(',')})`;
-      params.push(...typeList);
-    }
-    
-    query += ` ORDER BY created_at DESC LIMIT 100`;
-    
-    const metrics = await db.all(query, params);
-    
-    res.json({
-      success: true,
-      count: metrics.length,
-      metrics: metrics.map(m => ({
-        ...m,
-        metadata: safeJson(m.metadata)
-      }))
-    });
-    
-  } catch (err) {
-    console.error('Get latest health error:', err);
-    res.status(500).json({ error: 'Failed to get health data' });
-  }
-});
-
-// GET /api/mobile/health/summary - Get today's summary
-router.get('/summary', async (req, res) => {
-  try {
-    const userId = (req.user.userId || req.user.id);
-    const today = new Date().toISOString().split('T')[0];
-    
-    const summary = await db.get(`
-      SELECT 
-        COALESCE(SUM(CASE WHEN metric_type = 'steps' THEN value ELSE 0 END), 0) as total_steps,
-        COALESCE(SUM(CASE WHEN metric_type = 'active_calories' THEN value ELSE 0 END), 0) as total_active_calories,
-        COALESCE(SUM(CASE WHEN metric_type = 'distance' THEN value ELSE 0 END), 0) as total_distance,
-        COALESCE(AVG(CASE WHEN metric_type = 'heart_rate' THEN value END), 0) as avg_heart_rate,
-        COALESCE(MAX(CASE WHEN metric_type = 'heart_rate' THEN value END), 0) as max_heart_rate,
-        COUNT(CASE WHEN metric_type = 'workout' THEN 1 END) as workout_count
-      FROM mobile_health_metrics 
-      WHERE user_id = $1 
-      AND start_time::date = CURRENT_DATE
-    `, [userId]);
-    
-    // Get sleep data if available
-    const sleepData = await db.get(`
-      SELECT 
-        SUM(CASE 
-          WHEN end_time IS NOT NULL AND start_time IS NOT NULL 
-          THEN EXTRACT(EPOCH FROM (end_time - start_time)) / 3600
-          ELSE value 
-        END) as total_sleep_hours
-      FROM mobile_health_metrics 
-      WHERE user_id = $1 
-      AND metric_type = 'sleep'
-      AND start_time::date >= CURRENT_DATE - INTERVAL '1 day'
-    `, [userId]);
-    
-    res.json({
-      success: true,
-      date: today,
-      summary: {
-        ...summary,
-        total_sleep_hours: sleepData?.total_sleep_hours || 0
-      }
-    });
-    
-  } catch (err) {
-    console.error('Get summary error:', err);
-    res.status(500).json({ error: 'Failed to get summary' });
   }
 });
 

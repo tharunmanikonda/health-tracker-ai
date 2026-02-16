@@ -28,6 +28,7 @@ const PORT = process.env.PORT || 8000;
 
 app.use(cors());
 app.use(bodyParser.json({
+  limit: '10mb',
   verify: (req, _res, buf) => {
     req.rawBody = buf.toString('utf8');
   },
@@ -63,6 +64,25 @@ app.use('/api/wearables', wearablesRoutes);
 app.use('/api/ai-coach', aiCoachRoutes);
 app.use('/api/teams', teamsRoutes);
 app.use('/api/teams/:teamId/plans', authenticateToken, plansRoutes);
+
+// Health webhook endpoint - receives push notifications from mobile app when health data changes
+app.post('/api/health-webhook', async (req, res) => {
+  try {
+    const userId = req.user.userId || req.user.id;
+    const { event, data, source, deviceInfo } = req.body;
+
+    await db.run(
+      `INSERT INTO webhook_events (user_id, event_type, payload)
+       VALUES ($1, $2, $3)`,
+      [userId, event || 'health_data_updated', JSON.stringify({ source, deviceInfo, data })]
+    );
+
+    res.json({ success: true, message: 'Webhook received' });
+  } catch (err) {
+    console.error('Health webhook error:', err);
+    res.status(500).json({ error: 'Failed to process webhook' });
+  }
+});
 
 // Tracking routes - mounted at root /api for frontend compatibility
 app.use('/api/water', authenticateToken, (req, res, next) => {

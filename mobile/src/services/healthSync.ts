@@ -18,7 +18,7 @@ let HealthConnect: any = null;
 
 if (Platform.OS === 'ios') {
   try {
-    HealthKit = require('react-native-health').default;
+    HealthKit = require('react-native-health');
   } catch (e) {
     console.warn('[HealthSync] react-native-health not available');
   }
@@ -51,6 +51,11 @@ class HealthSyncService {
 
       if (Platform.OS === 'ios') {
         this.isAvailable = await this.initializeHealthKit();
+        // If permissions were previously granted, re-initialize the HealthKit session
+        // so that getSamples calls don't fail with "Authorization not determined"
+        if (this.isAvailable && this.hasPermissions) {
+          await this.requestHealthKitPermissions();
+        }
       } else if (Platform.OS === 'android') {
         this.isAvailable = await this.initializeHealthConnect();
       }
@@ -427,17 +432,22 @@ class HealthSyncService {
     unit: string,
     extraMetadata: Record<string, any> = {},
   ): void {
-    const value = this.normalizeMetricValue(metricType, sample?.value);
+    // react-native-health native module returns "quantity" or "distance" as the value key,
+    // and "start"/"end" instead of "startDate"/"endDate"
+    const rawValue = sample?.value ?? sample?.quantity ?? sample?.distance;
+    const value = this.normalizeMetricValue(metricType, rawValue);
     if (value == null) return;
-    if (!sample?.startDate || !sample?.endDate) return;
+    const startDate = sample?.startDate || sample?.start;
+    const endDate = sample?.endDate || sample?.end;
+    if (!startDate || !endDate) return;
 
     metrics.push({
       source: 'healthkit',
       type: metricType,
       value,
       unit,
-      startDate: sample.startDate,
-      endDate: sample.endDate,
+      startDate,
+      endDate,
       metadata: {...this.buildMetricMetadata(sample), ...extraMetadata},
       timestamp: new Date().toISOString(),
       processed: false,
@@ -464,23 +474,29 @@ class HealthSyncService {
       healthKitType: string;
       metricType: HealthMetric['type'];
       unit: string;
+      healthKitUnit: string;
     }> = [
-      {healthKitType: 'StepCount', metricType: 'steps', unit: 'count'},
-      {healthKitType: 'HeartRate', metricType: 'heart_rate', unit: 'count/min'},
-      {healthKitType: 'RestingHeartRate', metricType: 'resting_heart_rate', unit: 'count/min'},
-      {healthKitType: 'HeartRateVariabilitySDNN', metricType: 'heart_rate_variability', unit: 'ms'},
-      {healthKitType: 'ActiveEnergyBurned', metricType: 'active_calories', unit: 'kcal'},
-      {healthKitType: 'BasalEnergyBurned', metricType: 'basal_calories', unit: 'kcal'},
-      {healthKitType: 'DistanceWalkingRunning', metricType: 'distance', unit: 'm'},
-      {healthKitType: 'FlightsClimbed', metricType: 'flights_climbed', unit: 'count'},
-      {healthKitType: 'OxygenSaturation', metricType: 'oxygen_saturation', unit: '%'},
-      {healthKitType: 'RespiratoryRate', metricType: 'respiratory_rate', unit: 'count/min'},
-      {healthKitType: 'BodyTemperature', metricType: 'body_temperature', unit: 'degC'},
+      {healthKitType: 'StepCount', metricType: 'steps', unit: 'count', healthKitUnit: 'count'},
+      {healthKitType: 'HeartRate', metricType: 'heart_rate', unit: 'count/min', healthKitUnit: 'bpm'},
+      {healthKitType: 'RestingHeartRate', metricType: 'resting_heart_rate', unit: 'count/min', healthKitUnit: 'bpm'},
+      {healthKitType: 'HeartRateVariabilitySDNN', metricType: 'heart_rate_variability', unit: 'ms', healthKitUnit: 'second'},
+      {healthKitType: 'ActiveEnergyBurned', metricType: 'active_calories', unit: 'kcal', healthKitUnit: 'kilocalorie'},
+      {healthKitType: 'BasalEnergyBurned', metricType: 'basal_calories', unit: 'kcal', healthKitUnit: 'kilocalorie'},
+      {healthKitType: 'DistanceWalkingRunning', metricType: 'distance', unit: 'm', healthKitUnit: 'meter'},
+      {healthKitType: 'FlightsClimbed', metricType: 'flights_climbed', unit: 'count', healthKitUnit: 'count'},
+      {healthKitType: 'OxygenSaturation', metricType: 'oxygen_saturation', unit: '%', healthKitUnit: 'percent'},
+      {healthKitType: 'RespiratoryRate', metricType: 'respiratory_rate', unit: 'count/min', healthKitUnit: 'bpm'},
+      {healthKitType: 'BodyTemperature', metricType: 'body_temperature', unit: 'degC', healthKitUnit: 'celsius'},
     ];
 
+    console.log(`[HealthSync] Fetching metrics from ${start} to ${end}`);
     for (const spec of metricSpecs) {
       try {
-        const samples = await this.getHealthKitSamples(spec.healthKitType, start, end);
+        const samples = await this.getHealthKitSamples(spec.healthKitType, start, end, spec.healthKitUnit);
+        console.log(`[HealthSync] ${spec.healthKitType}: ${samples.length} samples`);
+        if (samples.length > 0) {
+          console.log(`[HealthSync] ${spec.healthKitType} sample[0]:`, JSON.stringify(samples[0]).slice(0, 200));
+        }
         for (const sample of samples) {
           this.pushSampleAsMetric(metrics, sample, spec.metricType, spec.unit);
         }
@@ -488,6 +504,7 @@ class HealthSyncService {
         console.error(`[HealthSync] ${spec.healthKitType} fetch error:`, error);
       }
     }
+    console.log(`[HealthSync] Total metrics after fetch: ${metrics.length}`);
 
     // Fetch workouts
     try {
@@ -559,14 +576,17 @@ class HealthSyncService {
   }
 
   // Get HealthKit samples
-  private getHealthKitSamples(type: string, startDate: string, endDate: string): Promise<any[]> {
+  private getHealthKitSamples(type: string, startDate: string, endDate: string, unit?: string): Promise<any[]> {
     return new Promise((resolve, reject) => {
-      const options = {
+      const options: Record<string, any> = {
         type,
         startDate,
         endDate,
         includeManuallyAdded: true,
       };
+      if (unit) {
+        options.unit = unit;
+      }
 
       HealthKit.getSamples(options, (err: any, results: any[]) => {
         if (err) reject(err);
@@ -584,9 +604,13 @@ class HealthSyncService {
         includeManuallyAdded: true,
       };
 
-      HealthKit.getWorkoutSamples(options, (err: any, results: any[]) => {
+      HealthKit.getAnchoredWorkouts(options, (err: any, results: any) => {
         if (err) reject(err);
-        else resolve(results || []);
+        else {
+          // getAnchoredWorkouts returns { anchor, data } where data is the workout array
+          const workouts = results?.data || results || [];
+          resolve(Array.isArray(workouts) ? workouts : []);
+        }
       });
     });
   }
@@ -744,7 +768,9 @@ class HealthSyncService {
     const summary = {steps: 0, activeCalories: 0, workouts: 0, sleepHours: 0};
 
     try {
-      const {metrics, workouts, sleep} = await this.syncHealthData(0, {
+      // Use days=1 so the summary includes last night's sleep and recent activity
+      // (days=0 would only show data from midnight today, which is empty early morning)
+      const {metrics, workouts, sleep} = await this.syncHealthData(1, {
         preferIncremental: false,
       });
 

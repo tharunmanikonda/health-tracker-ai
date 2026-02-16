@@ -25,19 +25,42 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-function mapFitbitMetrics(rows) {
-  const map = {};
-  for (const row of rows) {
-    if (!map[row.metric_type]) {
-      map[row.metric_type] = {
-        value: row.value,
-        unit: row.unit,
-        metadata: safeJson(row.metadata),
-        updatedAt: row.created_at,
-      };
-    }
+function buildFitbitMetricsFromTables(daily, sleepRow, weightRow) {
+  const metrics = {};
+  if (daily) {
+    if (daily.steps != null) metrics.steps = { value: daily.steps, unit: 'count' };
+    if (daily.calories_active != null) metrics.active_calories = { value: daily.calories_active, unit: 'kcal' };
+    if (daily.resting_heart_rate != null) metrics.resting_heart_rate = { value: daily.resting_heart_rate, unit: 'bpm' };
+    if (daily.hrv_rmssd != null) metrics.hrv = { value: Math.round(daily.hrv_rmssd), unit: 'ms' };
+    if (daily.azm_total != null) metrics.active_zone_minutes = { value: daily.azm_total, unit: 'minutes' };
+    if (daily.distance_km != null) metrics.distance = { value: daily.distance_km, unit: 'km' };
+    if (daily.floors != null) metrics.floors = { value: daily.floors, unit: 'count' };
   }
-  return map;
+  if (sleepRow) {
+    metrics.sleep = {
+      value: sleepRow.minutes_asleep,
+      unit: 'minutes',
+      metadata: {
+        efficiency: sleepRow.efficiency,
+        timeInBed: sleepRow.time_in_bed,
+        minutesAwake: sleepRow.minutes_awake,
+        stages: {
+          deep: sleepRow.deep_minutes || 0,
+          light: sleepRow.light_minutes || 0,
+          rem: sleepRow.rem_minutes || 0,
+          wake: sleepRow.wake_minutes || 0,
+          deepAvg30: sleepRow.deep_30day_avg,
+          lightAvg30: sleepRow.light_30day_avg,
+          remAvg30: sleepRow.rem_30day_avg,
+          wakeAvg30: sleepRow.wake_30day_avg,
+        },
+      },
+    };
+  }
+  if (weightRow) {
+    metrics.weight = { value: weightRow.weight_kg, unit: 'kg', metadata: { bmi: weightRow.bmi, fat: weightRow.body_fat_pct } };
+  }
+  return metrics;
 }
 
 function metricValue(metric) {
@@ -114,7 +137,7 @@ router.get('/today', async (req, res) => {
       }
     }
 
-    const [foodLogs, whoopMetrics, workouts, cycles, summary, user, waterData, fitbitRows] = await Promise.all([
+    const [foodLogs, whoopMetrics, workouts, cycles, summary, user, waterData, fitbitDaily, fitbitSleepRow, fitbitWeightRow] = await Promise.all([
       db.all(`
         SELECT * FROM food_logs
         WHERE user_id = $1 AND timestamp::date = $2
@@ -144,21 +167,16 @@ router.get('/today', async (req, res) => {
         'SELECT SUM(amount) as total FROM water_logs WHERE user_id = $1 AND timestamp::date = CURRENT_DATE',
         [userId]
       ),
-      db.all(`
-        SELECT metric_type, value, unit, metadata, created_at
-        FROM mobile_health_metrics
-        WHERE user_id = $1
-          AND source = 'fitbit'
-          AND start_time::date >= ($2::date - INTERVAL '1 day')
-        ORDER BY created_at DESC
-      `, [userId, today]),
+      db.get(`SELECT * FROM fitbit_daily WHERE user_id = $1 AND date = $2`, [userId, today]),
+      db.get(`SELECT * FROM fitbit_sleep WHERE user_id = $1 AND date >= ($2::date - INTERVAL '1 day') ORDER BY created_at DESC LIMIT 1`, [userId, today]),
+      db.get(`SELECT * FROM fitbit_weight WHERE user_id = $1 ORDER BY date DESC LIMIT 1`, [userId]),
     ]);
 
     const goals = user || { daily_calorie_goal: 2500, daily_protein_goal: 150 };
 
-    const fitbitMetrics = mapFitbitMetrics(fitbitRows);
+    const fitbitMetrics = buildFitbitMetricsFromTables(fitbitDaily, fitbitSleepRow, fitbitWeightRow);
     const fitbitDerived = deriveFitbitInsights(fitbitMetrics);
-    const fitbitLatestAt = fitbitRows[0]?.created_at || null;
+    const fitbitLatestAt = fitbitDaily?.updated_at || fitbitDaily?.created_at || null;
     const fitbitSummary = fitbitConnection ? {
       connected: true,
       connected_at: fitbitConnection.connected_at,

@@ -4,7 +4,7 @@ export const FEATURE_FLAGS = {
   MOBILE_PLANNER_V1: true,
   MOBILE_SETTINGS_V1: true,
   NATIVE_SCANNER_PRIMARY: true,
-  WEB_MIRROR_TAB: true,
+  WEB_MIRROR_TAB: false,
 } as const;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAGS;

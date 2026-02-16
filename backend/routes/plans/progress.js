@@ -118,4 +118,46 @@ router.get('/:planId/progress/:date', requireTeamMember, async (req, res) => {
   }
 });
 
+// GET /:planId/wearable-activity/:date - Get wearable workout data for this user on a date
+// Queries all provider-specific workout tables (Apple Health, Health Connect, Fitbit)
+router.get('/:planId/wearable-activity/:date', requireTeamMember, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { date } = req.params;
+
+    // Query all provider workout tables with UNION ALL
+    const workouts = await db.all(
+      `SELECT id, 'apple_healthkit' AS source, workout_type, start_time, end_time,
+              duration_seconds, total_calories, active_calories, distance_meters,
+              avg_heart_rate, max_heart_rate, metadata
+       FROM apple_health_workouts
+       WHERE user_id = $1 AND start_time::date = $2::date
+       UNION ALL
+       SELECT id, 'health_connect' AS source, workout_type, start_time, end_time,
+              duration_seconds, total_calories, NULL AS active_calories, NULL AS distance_meters,
+              NULL AS avg_heart_rate, NULL AS max_heart_rate, metadata
+       FROM health_connect_workouts
+       WHERE user_id = $1 AND start_time::date = $2::date
+       UNION ALL
+       SELECT id, 'fitbit' AS source, workout_type, start_time, end_time,
+              duration_seconds, calories AS total_calories, NULL AS active_calories, distance_km AS distance_meters,
+              avg_heart_rate, NULL AS max_heart_rate, metadata
+       FROM fitbit_workouts
+       WHERE user_id = $1 AND start_time::date = $2::date
+       ORDER BY start_time`,
+      [userId, date]
+    );
+
+    res.json({
+      workouts: workouts.map(w => ({
+        ...w,
+        metadata: typeof w.metadata === 'string' ? JSON.parse(w.metadata) : w.metadata
+      }))
+    });
+  } catch (err) {
+    console.error('Wearable activity error:', err);
+    res.status(500).json({ error: 'Failed to fetch wearable activity' });
+  }
+});
+
 module.exports = router;

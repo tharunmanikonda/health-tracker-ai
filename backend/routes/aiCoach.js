@@ -119,27 +119,45 @@ async function getHealthContext(userId) {
       LIMIT 1
     `, [userId]);
     
-    // Latest wearable data (Fitbit, Google Fit, etc.)
-    const wearableData = await db.get(`
-      SELECT
-        SUM(CASE WHEN metric_type = 'steps' THEN value ELSE 0 END) as steps,
-        AVG(CASE WHEN metric_type IN ('heart_rate', 'resting_heart_rate') THEN value END) as avg_hr,
-        SUM(CASE WHEN metric_type = 'active_calories' THEN value ELSE 0 END) as active_calories,
-        MAX(CASE WHEN metric_type = 'hrv' THEN value END) as hrv,
-        MAX(CASE WHEN metric_type = 'active_zone_minutes' THEN value END) as active_zone_minutes,
-        MAX(CASE WHEN metric_type = 'distance' THEN value END) as distance,
-        MAX(CASE WHEN metric_type = 'floors' THEN value END) as floors
-      FROM mobile_health_metrics
-      WHERE user_id = $1 AND created_at::date = CURRENT_DATE
+    // Latest wearable data from Fitbit daily table
+    const fitbitDaily = await db.get(`
+      SELECT steps, calories_active, resting_heart_rate, hrv_rmssd,
+             azm_total, distance_km, floors
+      FROM fitbit_daily WHERE user_id = $1 AND date = CURRENT_DATE
     `, [userId]);
 
-    // Fitbit sleep data (more detailed than manual sleep)
-    const fitbitSleep = await db.get(`
-      SELECT value, metadata FROM mobile_health_metrics
-      WHERE user_id = $1 AND source = 'fitbit' AND metric_type = 'sleep'
-      AND created_at::date = CURRENT_DATE
+    const wearableData = fitbitDaily ? {
+      steps: fitbitDaily.steps || 0,
+      avg_hr: fitbitDaily.resting_heart_rate,
+      active_calories: fitbitDaily.calories_active || 0,
+      hrv: fitbitDaily.hrv_rmssd ? Math.round(fitbitDaily.hrv_rmssd) : null,
+      active_zone_minutes: fitbitDaily.azm_total,
+      distance: fitbitDaily.distance_km,
+      floors: fitbitDaily.floors,
+    } : {};
+
+    // Fitbit sleep data
+    const fitbitSleepRow = await db.get(`
+      SELECT minutes_asleep, efficiency, minutes_awake,
+             deep_minutes, light_minutes, rem_minutes, wake_minutes,
+             deep_30day_avg, light_30day_avg, rem_30day_avg, wake_30day_avg
+      FROM fitbit_sleep WHERE user_id = $1 AND date >= (CURRENT_DATE - INTERVAL '1 day')
       ORDER BY created_at DESC LIMIT 1
     `, [userId]);
+
+    const fitbitSleep = fitbitSleepRow ? {
+      value: fitbitSleepRow.minutes_asleep,
+      metadata: {
+        efficiency: fitbitSleepRow.efficiency,
+        minutesAwake: fitbitSleepRow.minutes_awake,
+        stages: {
+          deep: fitbitSleepRow.deep_minutes || 0,
+          light: fitbitSleepRow.light_minutes || 0,
+          rem: fitbitSleepRow.rem_minutes || 0,
+          wake: fitbitSleepRow.wake_minutes || 0,
+        },
+      },
+    } : null;
     
     // Recent weight
     const latestWeight = await db.get(`

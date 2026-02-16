@@ -52,18 +52,6 @@ class FitbitService {
     return 'Basic ' + Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
   }
 
-  normalizeMetadata(value) {
-    if (value == null) return null;
-    if (typeof value === 'string') {
-      try {
-        return JSON.parse(value);
-      } catch {
-        return null;
-      }
-    }
-    return value;
-  }
-
   parseDate(date) {
     const valid = /^\d{4}-\d{2}-\d{2}$/.test(String(date));
     return valid ? date : toDateString();
@@ -287,23 +275,27 @@ class FitbitService {
   // FRESHNESS + SYNC PLANS
   // ========================
 
-  async getLatestMetricTimestamps(userId) {
-    const rows = await db.all(`
-      SELECT metric_type, MAX(created_at) AS last_created_at
-      FROM mobile_health_metrics
-      WHERE user_id = $1 AND source = 'fitbit'
-      GROUP BY metric_type
-    `, [userId]);
+  async getCollectionFreshness(userId) {
+    const today = toDateString();
+    const [daily, sleepRow, weightRow] = await Promise.all([
+      db.get(`SELECT steps, resting_heart_rate, hrv_rmssd, azm_total, updated_at
+              FROM fitbit_daily WHERE user_id = $1 AND date = $2`, [userId, today]),
+      db.get(`SELECT MAX(created_at) as ts FROM fitbit_sleep
+              WHERE user_id = $1 AND date >= ($2::date - INTERVAL '1 day')`, [userId, today]),
+      db.get(`SELECT MAX(created_at) as ts FROM fitbit_weight
+              WHERE user_id = $1 AND date >= ($2::date - INTERVAL '7 days')`, [userId, today]),
+    ]);
 
-    const map = {};
-    for (const row of rows) {
-      map[row.metric_type] = row.last_created_at ? new Date(row.last_created_at).getTime() : 0;
-    }
-    return map;
-  }
+    const updatedMs = daily?.updated_at ? new Date(daily.updated_at).getTime() : 0;
 
-  getMaxTimestamp(map, metricTypes) {
-    return metricTypes.reduce((max, metricType) => Math.max(max, map[metricType] || 0), 0);
+    return {
+      activity: daily?.steps != null ? updatedMs : 0,
+      heartRate: daily?.resting_heart_rate != null ? updatedMs : 0,
+      hrv: daily?.hrv_rmssd != null ? updatedMs : 0,
+      azm: daily?.azm_total != null ? updatedMs : 0,
+      sleep: sleepRow?.ts ? new Date(sleepRow.ts).getTime() : 0,
+      weight: weightRow?.ts ? new Date(weightRow.ts).getTime() : 0,
+    };
   }
 
   isStale(timestampMs, staleMs) {
@@ -322,17 +314,14 @@ class FitbitService {
     }
 
     if (mode === 'cron') {
-      const timestamps = await this.getLatestMetricTimestamps(userId);
-      const webhookActivityLatest = this.getMaxTimestamp(timestamps, ['steps', 'active_calories', 'distance', 'very_active_minutes', 'fairly_active_minutes', 'floors']);
-      const webhookSleepLatest = this.getMaxTimestamp(timestamps, ['sleep']);
-      const webhookWeightLatest = this.getMaxTimestamp(timestamps, ['weight']);
+      const freshness = await this.getCollectionFreshness(userId);
 
       return {
-        activity: this.isStale(webhookActivityLatest, this.webhookFallbackStaleMs),
+        activity: this.isStale(freshness.activity, this.webhookFallbackStaleMs),
         heartRate: true,
         hrv: true,
-        sleep: this.isStale(webhookSleepLatest, this.webhookFallbackStaleMs),
-        weight: this.isStale(webhookWeightLatest, this.webhookFallbackStaleMs),
+        sleep: this.isStale(freshness.sleep, this.webhookFallbackStaleMs),
+        weight: this.isStale(freshness.weight, this.webhookFallbackStaleMs),
         azm: true,
       };
     }
@@ -341,8 +330,8 @@ class FitbitService {
       return { ...DEFAULT_SYNC_PLAN };
     }
 
-    const [timestamps, connection] = await Promise.all([
-      this.getLatestMetricTimestamps(userId),
+    const [freshness, connection] = await Promise.all([
+      this.getCollectionFreshness(userId),
       this.loadConnection(userId),
     ]);
 
@@ -358,18 +347,13 @@ class FitbitService {
       };
     }
 
-    const nonWebhookLatest = this.getMaxTimestamp(timestamps, ['resting_heart_rate', 'heart_rate_zones', 'hrv', 'active_zone_minutes']);
-    const webhookActivityLatest = this.getMaxTimestamp(timestamps, ['steps', 'active_calories', 'distance', 'very_active_minutes', 'fairly_active_minutes', 'floors']);
-    const webhookSleepLatest = this.getMaxTimestamp(timestamps, ['sleep']);
-    const webhookWeightLatest = this.getMaxTimestamp(timestamps, ['weight']);
-
     return {
-      activity: this.isStale(webhookActivityLatest, this.webhookFallbackStaleMs),
-      heartRate: this.isStale(timestamps.resting_heart_rate || nonWebhookLatest, this.nonWebhookStaleMs),
-      hrv: this.isStale(timestamps.hrv, this.hrvStaleMs),
-      sleep: this.isStale(webhookSleepLatest, this.webhookFallbackStaleMs),
-      weight: this.isStale(webhookWeightLatest, this.webhookFallbackStaleMs),
-      azm: this.isStale(timestamps.active_zone_minutes || nonWebhookLatest, this.nonWebhookStaleMs),
+      activity: this.isStale(freshness.activity, this.webhookFallbackStaleMs),
+      heartRate: this.isStale(freshness.heartRate, this.nonWebhookStaleMs),
+      hrv: this.isStale(freshness.hrv, this.hrvStaleMs),
+      sleep: this.isStale(freshness.sleep, this.webhookFallbackStaleMs),
+      weight: this.isStale(freshness.weight, this.webhookFallbackStaleMs),
+      azm: this.isStale(freshness.azm, this.nonWebhookStaleMs),
     };
   }
 
@@ -382,38 +366,37 @@ class FitbitService {
     const summary = data?.summary;
     if (!summary) return false;
 
+    const totalDist = summary.distances?.find(d => d.activity === 'total');
+    const activeMinutes = (summary.veryActiveMinutes || 0) + (summary.fairlyActiveMinutes || 0);
+
+    await db.run(`
+      INSERT INTO fitbit_daily (user_id, date, steps, calories_total, calories_active, distance_km, floors, active_minutes)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      ON CONFLICT (user_id, date) DO UPDATE SET
+        steps = COALESCE(EXCLUDED.steps, fitbit_daily.steps),
+        calories_total = COALESCE(EXCLUDED.calories_total, fitbit_daily.calories_total),
+        calories_active = COALESCE(EXCLUDED.calories_active, fitbit_daily.calories_active),
+        distance_km = COALESCE(EXCLUDED.distance_km, fitbit_daily.distance_km),
+        floors = COALESCE(EXCLUDED.floors, fitbit_daily.floors),
+        active_minutes = COALESCE(EXCLUDED.active_minutes, fitbit_daily.active_minutes),
+        updated_at = CURRENT_TIMESTAMP
+    `, [
+      userId, date,
+      summary.steps ?? null,
+      summary.caloriesOut ?? null,
+      summary.activityCalories ?? summary.caloriesOut ?? null,
+      totalDist?.distance ?? null,
+      summary.floors ?? null,
+      activeMinutes || null,
+    ]);
+
     if (summary.steps != null) {
-      await this.upsertMetric(userId, 'steps', summary.steps, 'count', date);
       await this.pushToAIFeed(userId, 'activity', {
-        date,
-        steps: summary.steps,
-        caloriesOut: summary.caloriesOut,
+        date, steps: summary.steps, caloriesOut: summary.caloriesOut,
         veryActiveMinutes: summary.veryActiveMinutes,
         fairlyActiveMinutes: summary.fairlyActiveMinutes,
-        lightlyActiveMinutes: summary.lightlyActiveMinutes,
-        sedentaryMinutes: summary.sedentaryMinutes,
         source: 'fitbit',
       });
-    }
-
-    if (summary.caloriesOut != null) {
-      await this.upsertMetric(userId, 'active_calories', summary.caloriesOut, 'kcal', date);
-    }
-
-    const totalDist = summary.distances?.find(d => d.activity === 'total');
-    if (totalDist) {
-      await this.upsertMetric(userId, 'distance', totalDist.distance, 'km', date);
-    }
-
-    if (summary.veryActiveMinutes != null) {
-      await this.upsertMetric(userId, 'very_active_minutes', summary.veryActiveMinutes, 'minutes', date);
-    }
-    if (summary.fairlyActiveMinutes != null) {
-      await this.upsertMetric(userId, 'fairly_active_minutes', summary.fairlyActiveMinutes, 'minutes', date);
-    }
-
-    if (summary.floors != null) {
-      await this.upsertMetric(userId, 'floors', summary.floors, 'count', date);
     }
 
     console.log(`[Fitbit]   Activity synced (${date}): steps=${summary.steps}, calories=${summary.caloriesOut}`);
@@ -425,19 +408,21 @@ class FitbitService {
     const hrData = data?.['activities-heart']?.[0]?.value;
     if (!hrData) return false;
 
-    if (hrData.restingHeartRate != null) {
-      await this.upsertMetric(userId, 'resting_heart_rate', hrData.restingHeartRate, 'bpm', date);
-      await this.pushToAIFeed(userId, 'heart_rate', {
-        date,
-        restingHeartRate: hrData.restingHeartRate,
-        zones: hrData.heartRateZones,
-        source: 'fitbit',
-      });
-    }
+    // Merge resting HR + zones into fitbit_daily row
+    const zonesJson = hrData.heartRateZones ? JSON.stringify({ zones: hrData.heartRateZones }) : null;
+    await db.run(`
+      INSERT INTO fitbit_daily (user_id, date, resting_heart_rate, metadata)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (user_id, date) DO UPDATE SET
+        resting_heart_rate = COALESCE(EXCLUDED.resting_heart_rate, fitbit_daily.resting_heart_rate),
+        metadata = COALESCE(EXCLUDED.metadata, fitbit_daily.metadata),
+        updated_at = CURRENT_TIMESTAMP
+    `, [userId, date, hrData.restingHeartRate ?? null, zonesJson]);
 
-    if (hrData.heartRateZones) {
-      await this.upsertMetric(userId, 'heart_rate_zones', 0, 'zones', date, {
-        zones: hrData.heartRateZones,
+    if (hrData.restingHeartRate != null) {
+      await this.pushToAIFeed(userId, 'heart_rate', {
+        date, restingHeartRate: hrData.restingHeartRate,
+        zones: hrData.heartRateZones, source: 'fitbit',
       });
     }
 
@@ -451,15 +436,18 @@ class FitbitService {
     if (!hrvData) return false;
 
     if (hrvData.dailyRmssd != null) {
-      await this.upsertMetric(userId, 'hrv', Math.round(hrvData.dailyRmssd), 'ms', date, {
-        dailyRmssd: hrvData.dailyRmssd,
-        deepRmssd: hrvData.deepRmssd,
-      });
+      await db.run(`
+        INSERT INTO fitbit_daily (user_id, date, hrv_rmssd, hrv_deep_rmssd)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (user_id, date) DO UPDATE SET
+          hrv_rmssd = COALESCE(EXCLUDED.hrv_rmssd, fitbit_daily.hrv_rmssd),
+          hrv_deep_rmssd = COALESCE(EXCLUDED.hrv_deep_rmssd, fitbit_daily.hrv_deep_rmssd),
+          updated_at = CURRENT_TIMESTAMP
+      `, [userId, date, hrvData.dailyRmssd, hrvData.deepRmssd ?? null]);
+
       await this.pushToAIFeed(userId, 'hrv', {
-        date,
-        dailyRmssd: hrvData.dailyRmssd,
-        deepRmssd: hrvData.deepRmssd,
-        source: 'fitbit',
+        date, dailyRmssd: hrvData.dailyRmssd,
+        deepRmssd: hrvData.deepRmssd, source: 'fitbit',
       });
     }
 
@@ -476,37 +464,53 @@ class FitbitService {
     const sleepHours = sleepMinutes / 60;
     const stages = mainSleep.levels?.summary || {};
 
-    await this.upsertMetric(userId, 'sleep', sleepMinutes, 'minutes', date, {
-      efficiency: mainSleep.efficiency,
-      timeInBed: mainSleep.timeInBed,
-      minutesAwake: mainSleep.minutesAwake,
-      startTime: mainSleep.startTime,
-      endTime: mainSleep.endTime,
-      type: mainSleep.type,
-      stages: {
-        deep: stages.deep?.minutes || 0,
-        light: stages.light?.minutes || 0,
-        rem: stages.rem?.minutes || 0,
-        wake: stages.wake?.minutes || 0,
-        deepAvg30: stages.deep?.thirtyDayAvgMinutes,
-        lightAvg30: stages.light?.thirtyDayAvgMinutes,
-        remAvg30: stages.rem?.thirtyDayAvgMinutes,
-        wakeAvg30: stages.wake?.thirtyDayAvgMinutes,
-      },
-    });
+    await db.run(`
+      INSERT INTO fitbit_sleep (user_id, fitbit_log_id, date, start_time, end_time,
+        minutes_asleep, minutes_awake, efficiency, time_in_bed,
+        deep_minutes, light_minutes, rem_minutes, wake_minutes,
+        deep_30day_avg, light_30day_avg, rem_30day_avg, wake_30day_avg, metadata)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      ON CONFLICT (user_id, fitbit_log_id) DO UPDATE SET
+        minutes_asleep = EXCLUDED.minutes_asleep,
+        minutes_awake = EXCLUDED.minutes_awake,
+        efficiency = EXCLUDED.efficiency,
+        time_in_bed = EXCLUDED.time_in_bed,
+        deep_minutes = EXCLUDED.deep_minutes,
+        light_minutes = EXCLUDED.light_minutes,
+        rem_minutes = EXCLUDED.rem_minutes,
+        wake_minutes = EXCLUDED.wake_minutes,
+        deep_30day_avg = EXCLUDED.deep_30day_avg,
+        light_30day_avg = EXCLUDED.light_30day_avg,
+        rem_30day_avg = EXCLUDED.rem_30day_avg,
+        wake_30day_avg = EXCLUDED.wake_30day_avg,
+        metadata = EXCLUDED.metadata
+    `, [
+      userId,
+      String(mainSleep.logId || `${date}-main`),
+      date,
+      mainSleep.startTime || null,
+      mainSleep.endTime || null,
+      sleepMinutes,
+      mainSleep.minutesAwake || null,
+      mainSleep.efficiency || null,
+      mainSleep.timeInBed || null,
+      stages.deep?.minutes || null,
+      stages.light?.minutes || null,
+      stages.rem?.minutes || null,
+      stages.wake?.minutes || null,
+      stages.deep?.thirtyDayAvgMinutes || null,
+      stages.light?.thirtyDayAvgMinutes || null,
+      stages.rem?.thirtyDayAvgMinutes || null,
+      stages.wake?.thirtyDayAvgMinutes || null,
+      JSON.stringify({ type: mainSleep.type }),
+    ]);
 
     await this.pushToAIFeed(userId, 'sleep', {
-      date,
-      sleepHours,
-      efficiency: mainSleep.efficiency,
-      minutesAsleep: sleepMinutes,
-      minutesAwake: mainSleep.minutesAwake,
-      deepMinutes: stages.deep?.minutes || 0,
-      lightMinutes: stages.light?.minutes || 0,
-      remMinutes: stages.rem?.minutes || 0,
-      startTime: mainSleep.startTime,
-      endTime: mainSleep.endTime,
-      source: 'fitbit',
+      date, sleepHours, efficiency: mainSleep.efficiency,
+      minutesAsleep: sleepMinutes, minutesAwake: mainSleep.minutesAwake,
+      deepMinutes: stages.deep?.minutes || 0, lightMinutes: stages.light?.minutes || 0,
+      remMinutes: stages.rem?.minutes || 0, startTime: mainSleep.startTime,
+      endTime: mainSleep.endTime, source: 'fitbit',
     });
 
     console.log(`[Fitbit]   Sleep synced (${date}): hours=${sleepHours.toFixed(1)}, efficiency=${mainSleep.efficiency}`);
@@ -518,17 +522,25 @@ class FitbitService {
     const latestWeight = data?.weight?.[0];
     if (!latestWeight) return false;
 
-    await this.upsertMetric(userId, 'weight', latestWeight.weight, 'lbs', date, {
-      bmi: latestWeight.bmi,
-      fat: latestWeight.fat,
-      source: latestWeight.source,
-    });
+    await db.run(`
+      INSERT INTO fitbit_weight (user_id, date, weight_kg, bmi, body_fat_pct, metadata)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (user_id, date) DO UPDATE SET
+        weight_kg = EXCLUDED.weight_kg,
+        bmi = EXCLUDED.bmi,
+        body_fat_pct = EXCLUDED.body_fat_pct,
+        metadata = EXCLUDED.metadata
+    `, [
+      userId, date,
+      latestWeight.weight ?? null,
+      latestWeight.bmi ?? null,
+      latestWeight.fat ?? null,
+      JSON.stringify({ source: latestWeight.source }),
+    ]);
+
     await this.pushToAIFeed(userId, 'weight', {
-      date,
-      weight: latestWeight.weight,
-      bmi: latestWeight.bmi,
-      fat: latestWeight.fat,
-      source: 'fitbit',
+      date, weight: latestWeight.weight, bmi: latestWeight.bmi,
+      fat: latestWeight.fat, source: 'fitbit',
     });
 
     console.log(`[Fitbit]   Weight synced (${date}): weight=${latestWeight.weight}, bmi=${latestWeight.bmi}`);
@@ -540,11 +552,22 @@ class FitbitService {
     const azmData = data?.['activities-active-zone-minutes']?.[0]?.value;
     if (!azmData) return false;
 
-    await this.upsertMetric(userId, 'active_zone_minutes', azmData.activeZoneMinutes || 0, 'minutes', date, {
-      fatBurn: azmData.fatBurnActiveZoneMinutes || 0,
-      cardio: azmData.cardioActiveZoneMinutes || 0,
-      peak: azmData.peakActiveZoneMinutes || 0,
-    });
+    await db.run(`
+      INSERT INTO fitbit_daily (user_id, date, azm_total, azm_fat_burn, azm_cardio, azm_peak)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (user_id, date) DO UPDATE SET
+        azm_total = COALESCE(EXCLUDED.azm_total, fitbit_daily.azm_total),
+        azm_fat_burn = COALESCE(EXCLUDED.azm_fat_burn, fitbit_daily.azm_fat_burn),
+        azm_cardio = COALESCE(EXCLUDED.azm_cardio, fitbit_daily.azm_cardio),
+        azm_peak = COALESCE(EXCLUDED.azm_peak, fitbit_daily.azm_peak),
+        updated_at = CURRENT_TIMESTAMP
+    `, [
+      userId, date,
+      azmData.activeZoneMinutes || 0,
+      azmData.fatBurnActiveZoneMinutes || 0,
+      azmData.cardioActiveZoneMinutes || 0,
+      azmData.peakActiveZoneMinutes || 0,
+    ]);
 
     console.log(`[Fitbit]   AZM synced (${date}): total=${azmData.activeZoneMinutes}`);
     return true;
@@ -654,28 +677,11 @@ class FitbitService {
   // HELPER METHODS
   // ========================
 
-  // Upsert a metric into mobile_health_metrics (prevents duplicates)
-  async upsertMetric(userId, metricType, value, unit, date, metadata = null) {
-    const startTime = `${date}T00:00:00`;
-    const endTime = `${date}T23:59:59`;
-
-    await db.run(`
-      DELETE FROM mobile_health_metrics
-      WHERE user_id = $1 AND source = 'fitbit' AND metric_type = $2
-        AND start_time::date = $3::date
-    `, [userId, metricType, date]);
-
-    await db.run(`
-      INSERT INTO mobile_health_metrics (user_id, source, metric_type, value, unit, start_time, end_time, metadata)
-      VALUES ($1, 'fitbit', $2, $3, $4, $5, $6, $7)
-    `, [userId, metricType, value, unit, startTime, endTime, metadata ? JSON.stringify(metadata) : null]);
-  }
-
   // Push data to AI feed queue
   async pushToAIFeed(userId, dataType, dataJson) {
     await db.run(`
       INSERT INTO ai_feed_queue (user_id, source_table, source_id, data_type, data_json)
-      VALUES ($1, 'mobile_health_metrics', 0, $2, $3)
+      VALUES ($1, 'fitbit_daily', 0, $2, $3)
     `, [userId, dataType, JSON.stringify({ ...dataJson, timestamp: new Date().toISOString() })]);
   }
 

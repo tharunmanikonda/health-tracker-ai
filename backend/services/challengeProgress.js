@@ -16,21 +16,39 @@ const metricQueries = {
     );
     if (manual?.total > 0) return manual.total;
 
-    const mobile = await db.get(
-      `SELECT COALESCE(SUM(value), 0) as total FROM mobile_health_metrics
-       WHERE user_id = $1 AND metric_type = 'activeEnergyBurned' AND DATE(start_time) = $2`,
+    // Check Fitbit daily table
+    const fitbit = await db.get(
+      `SELECT calories_active FROM fitbit_daily WHERE user_id = $1 AND date = $2`,
       [userId, date]
     );
-    return mobile?.total || 0;
+    if (fitbit?.calories_active > 0) return fitbit.calories_active;
+
+    // Check Apple Health / Health Connect workout tables
+    const ah = await db.get(
+      `SELECT COALESCE(SUM(active_calories), 0) as total FROM apple_health_workouts
+       WHERE user_id = $1 AND start_time::date = $2`, [userId, date]);
+    if (ah?.total > 0) return ah.total;
+
+    return 0;
   },
 
   steps: async (userId, date) => {
-    const result = await db.get(
-      `SELECT COALESCE(SUM(value), 0) as total FROM mobile_health_metrics
-       WHERE user_id = $1 AND metric_type = 'steps' AND DATE(start_time) = $2`,
-      [userId, date]
-    );
-    return result?.total || 0;
+    // Check Fitbit daily table
+    const fitbit = await db.get(
+      `SELECT steps FROM fitbit_daily WHERE user_id = $1 AND date = $2`, [userId, date]);
+    if (fitbit?.steps > 0) return fitbit.steps;
+
+    // Check Apple Health samples hypertable
+    const ah = await db.get(
+      `SELECT COALESCE(SUM(value), 0) as total FROM apple_health_samples_ts
+       WHERE user_id = $1 AND metric_type = 'steps' AND time::date = $2`, [userId, date]);
+    if (ah?.total > 0) return ah.total;
+
+    // Check Health Connect samples hypertable
+    const hc = await db.get(
+      `SELECT COALESCE(SUM(value), 0) as total FROM health_connect_samples_ts
+       WHERE user_id = $1 AND metric_type = 'steps' AND time::date = $2`, [userId, date]);
+    return hc?.total || 0;
   },
 
   water_intake: async (userId, date) => {

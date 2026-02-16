@@ -52,7 +52,7 @@ const INJECTED_JAVASCRIPT = `
     // Set viewport-fit=cover so env(safe-area-inset-*) works
     var viewport = document.querySelector('meta[name="viewport"]');
     if (viewport) {
-      viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, viewport-fit=cover');
+      viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover');
     }
 
     // Inject styles to make WebView feel like a native app
@@ -368,6 +368,8 @@ export const WebAppContainer: React.FC<WebAppContainerProps> = ({onMessage, onSc
           allowsInlineMediaPlayback={true}
           mediaPlaybackRequiresUserAction={false}
           mediaCapturePermissionGrantType="grant"
+          scalesPageToFit={false}
+          setBuiltInZoomControls={false}
         />
       )}
     </View>

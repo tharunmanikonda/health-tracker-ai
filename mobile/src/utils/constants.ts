@@ -11,7 +11,7 @@ export const API_BASE_URL = __DEV__
   ? `http://${LOCAL_IP}:8000/api`
   : 'https://your-production-domain.com/api';
 export const WEBAPP_URL = __DEV__
-  ? `http://${LOCAL_IP}:5173`
+  ? `http://${LOCAL_IP}:8080`
   : 'https://your-production-domain.com';
 
 // Health data constants

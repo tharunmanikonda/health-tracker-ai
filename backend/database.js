@@ -270,7 +270,7 @@ async function createTables() {
       DROP COLUMN IF EXISTS daily_protein_goal
     `);
 
-    // Mobile health metrics (from HealthKit / Health Connect)
+    // Mobile health metrics (legacy table — kept for backward compatibility)
     await client.query(`
       CREATE TABLE IF NOT EXISTS mobile_health_metrics (
         id SERIAL PRIMARY KEY,
@@ -286,13 +286,19 @@ async function createTables() {
       )
     `);
     await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_mobile_health_metrics_lookup
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_mobile_health_metrics_dedup
       ON mobile_health_metrics(user_id, source, metric_type, start_time, end_time)
     `);
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_mobile_health_metrics_created
       ON mobile_health_metrics(user_id, created_at DESC)
     `);
+
+    // ============================================================
+    // TimescaleDB: High-resolution time series health data
+    // Append-only, no updates. Batch inserts with ON CONFLICT DO NOTHING.
+    // ============================================================
+    await initTimescaleDB(client);
 
     // AI feed queue - unprocessed health data for AI
     await client.query(`
@@ -594,9 +600,17 @@ async function createTables() {
         actual_fat REAL,
         food_image_path TEXT,
         logged_at TIMESTAMP,
+        verification_status TEXT DEFAULT 'unverified',
+        verification_source TEXT,
+        wearable_metric_id INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Migration: add verification columns to existing plan_progress table
+    await client.query(`ALTER TABLE plan_progress ADD COLUMN IF NOT EXISTS verification_status TEXT DEFAULT 'unverified'`);
+    await client.query(`ALTER TABLE plan_progress ADD COLUMN IF NOT EXISTS verification_source TEXT`);
+    await client.query(`ALTER TABLE plan_progress ADD COLUMN IF NOT EXISTS wearable_metric_id INTEGER`);
 
     // Create indexes for performance
     await client.query(`
@@ -637,6 +651,374 @@ async function createTables() {
   } finally {
     client.release();
   }
+}
+
+// Initialize TimescaleDB per-provider hypertables + regular tables
+async function initTimescaleDB(client) {
+  // Enable TimescaleDB extension (no-op if not installed — falls back to regular tables)
+  // Use SAVEPOINT so a failed CREATE EXTENSION doesn't poison the enclosing transaction
+  let hasTimescale = false;
+  try {
+    await client.query('SAVEPOINT try_timescale');
+    await client.query(`CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE`);
+    await client.query('RELEASE SAVEPOINT try_timescale');
+    hasTimescale = true;
+  } catch (err) {
+    await client.query('ROLLBACK TO SAVEPOINT try_timescale');
+    console.log('⚠️  TimescaleDB extension not available — using regular PostgreSQL tables');
+  }
+
+  // ============================================================
+  // APPLE HEALTH (HealthKit) — iOS
+  // ============================================================
+
+  // Hypertable: high-frequency samples (HR at 1-sec, steps, calories, HRV, SpO2, etc.)
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS apple_health_samples_ts (
+      time TIMESTAMPTZ NOT NULL,
+      user_id INTEGER NOT NULL,
+      metric_type TEXT NOT NULL,
+      value DOUBLE PRECISION NOT NULL,
+      unit TEXT,
+      metadata JSONB,
+      UNIQUE (user_id, metric_type, time)
+    )
+  `);
+
+  // Regular: workout sessions
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS apple_health_workouts (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      workout_type TEXT NOT NULL,
+      start_time TIMESTAMPTZ NOT NULL,
+      end_time TIMESTAMPTZ,
+      duration_seconds REAL,
+      total_calories REAL,
+      active_calories REAL,
+      distance_meters REAL,
+      avg_heart_rate REAL,
+      max_heart_rate REAL,
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (user_id, workout_type, start_time)
+    )
+  `);
+
+  // Regular: sleep sessions with stages
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS apple_health_sleep (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      start_time TIMESTAMPTZ NOT NULL,
+      end_time TIMESTAMPTZ,
+      total_hours REAL,
+      deep_hours REAL,
+      rem_hours REAL,
+      core_hours REAL,
+      awake_hours REAL,
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (user_id, start_time)
+    )
+  `);
+
+  // ============================================================
+  // HEALTH CONNECT — Android
+  // ============================================================
+
+  // Hypertable: high-frequency samples (HR, steps, calories)
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS health_connect_samples_ts (
+      time TIMESTAMPTZ NOT NULL,
+      user_id INTEGER NOT NULL,
+      metric_type TEXT NOT NULL,
+      value DOUBLE PRECISION NOT NULL,
+      unit TEXT,
+      metadata JSONB,
+      UNIQUE (user_id, metric_type, time)
+    )
+  `);
+
+  // Regular: workout sessions
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS health_connect_workouts (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      workout_type TEXT NOT NULL,
+      start_time TIMESTAMPTZ NOT NULL,
+      end_time TIMESTAMPTZ,
+      duration_seconds REAL,
+      total_calories REAL,
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (user_id, workout_type, start_time)
+    )
+  `);
+
+  // Regular: sleep sessions
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS health_connect_sleep (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      start_time TIMESTAMPTZ NOT NULL,
+      end_time TIMESTAMPTZ,
+      total_hours REAL,
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (user_id, start_time)
+    )
+  `);
+
+  // ============================================================
+  // FITBIT — Cloud API
+  // ============================================================
+
+  // Hypertable: intraday HR (1-sec resolution when pulled via /activities/heart/date/.../1sec.json)
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS fitbit_samples_ts (
+      time TIMESTAMPTZ NOT NULL,
+      user_id INTEGER NOT NULL,
+      metric_type TEXT NOT NULL,
+      value DOUBLE PRECISION NOT NULL,
+      unit TEXT,
+      metadata JSONB,
+      UNIQUE (user_id, metric_type, time)
+    )
+  `);
+
+  // Regular: daily summaries (resting HR, HRV, AZM, steps, calories, distance, floors, active mins)
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS fitbit_daily (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      date DATE NOT NULL,
+      steps INTEGER,
+      calories_total INTEGER,
+      calories_active INTEGER,
+      distance_km REAL,
+      floors INTEGER,
+      active_minutes INTEGER,
+      resting_heart_rate INTEGER,
+      hrv_rmssd REAL,
+      hrv_deep_rmssd REAL,
+      azm_total INTEGER,
+      azm_fat_burn INTEGER,
+      azm_cardio INTEGER,
+      azm_peak INTEGER,
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (user_id, date)
+    )
+  `);
+
+  // Regular: workout logs with logType + HR zones
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS fitbit_workouts (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      fitbit_log_id TEXT,
+      workout_type TEXT NOT NULL,
+      log_type TEXT,
+      start_time TIMESTAMPTZ NOT NULL,
+      end_time TIMESTAMPTZ,
+      duration_seconds REAL,
+      calories INTEGER,
+      distance_km REAL,
+      avg_heart_rate INTEGER,
+      fat_burn_minutes INTEGER,
+      cardio_minutes INTEGER,
+      peak_minutes INTEGER,
+      out_of_range_minutes INTEGER,
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (user_id, fitbit_log_id)
+    )
+  `);
+
+  // Regular: sleep with stages + benchmarks
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS fitbit_sleep (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      fitbit_log_id TEXT,
+      date DATE NOT NULL,
+      start_time TIMESTAMPTZ,
+      end_time TIMESTAMPTZ,
+      minutes_asleep INTEGER,
+      minutes_awake INTEGER,
+      efficiency INTEGER,
+      time_in_bed INTEGER,
+      deep_minutes INTEGER,
+      light_minutes INTEGER,
+      rem_minutes INTEGER,
+      wake_minutes INTEGER,
+      deep_30day_avg INTEGER,
+      light_30day_avg INTEGER,
+      rem_30day_avg INTEGER,
+      wake_30day_avg INTEGER,
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (user_id, fitbit_log_id)
+    )
+  `);
+
+  // Regular: weight / body composition
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS fitbit_weight (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      date DATE NOT NULL,
+      weight_kg REAL,
+      bmi REAL,
+      body_fat_pct REAL,
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (user_id, date)
+    )
+  `);
+
+  // ============================================================
+  // HYPERTABLE SETUP + CONTINUOUS AGGREGATES + POLICIES
+  // ============================================================
+
+  const hypertables = [
+    { table: 'apple_health_samples_ts',  prefix: 'ah',  segmentby: 'user_id, metric_type' },
+    { table: 'health_connect_samples_ts', prefix: 'hc', segmentby: 'user_id, metric_type' },
+    { table: 'fitbit_samples_ts',         prefix: 'fb', segmentby: 'user_id, metric_type' },
+  ];
+
+  if (hasTimescale) {
+    for (const ht of hypertables) {
+      try {
+        await client.query(`
+          SELECT create_hypertable('${ht.table}', 'time',
+            if_not_exists => TRUE,
+            migrate_data => TRUE
+          )
+        `);
+        console.log(`✅ ${ht.table} hypertable ready`);
+
+        // Continuous aggregate: 1-minute buckets (AVG for rates, SUM for cumulative)
+        await client.query(`
+          CREATE MATERIALIZED VIEW IF NOT EXISTS ${ht.prefix}_samples_1min
+          WITH (timescaledb.continuous) AS
+          SELECT
+            time_bucket('1 minute', time) AS bucket,
+            user_id,
+            metric_type,
+            AVG(value) AS avg_value,
+            SUM(value) AS sum_value,
+            MIN(value) AS min_value,
+            MAX(value) AS max_value,
+            COUNT(*) AS sample_count
+          FROM ${ht.table}
+          GROUP BY bucket, user_id, metric_type
+          WITH NO DATA
+        `);
+
+        // Continuous aggregate: 1-hour buckets
+        await client.query(`
+          CREATE MATERIALIZED VIEW IF NOT EXISTS ${ht.prefix}_samples_1hr
+          WITH (timescaledb.continuous) AS
+          SELECT
+            time_bucket('1 hour', time) AS bucket,
+            user_id,
+            metric_type,
+            AVG(value) AS avg_value,
+            SUM(value) AS sum_value,
+            MIN(value) AS min_value,
+            MAX(value) AS max_value,
+            COUNT(*) AS sample_count
+          FROM ${ht.table}
+          GROUP BY bucket, user_id, metric_type
+          WITH NO DATA
+        `);
+
+        // Continuous aggregate: 1-day buckets
+        await client.query(`
+          CREATE MATERIALIZED VIEW IF NOT EXISTS ${ht.prefix}_samples_1day
+          WITH (timescaledb.continuous) AS
+          SELECT
+            time_bucket('1 day', time) AS bucket,
+            user_id,
+            metric_type,
+            AVG(value) AS avg_value,
+            SUM(value) AS sum_value,
+            MIN(value) AS min_value,
+            MAX(value) AS max_value,
+            COUNT(*) AS sample_count
+          FROM ${ht.table}
+          GROUP BY bucket, user_id, metric_type
+          WITH NO DATA
+        `);
+
+        // Refresh policies
+        try {
+          await client.query(`SELECT add_continuous_aggregate_policy('${ht.prefix}_samples_1min',
+            start_offset => INTERVAL '10 minutes', end_offset => INTERVAL '1 minute',
+            schedule_interval => INTERVAL '1 minute', if_not_exists => TRUE)`);
+        } catch (e) { /* policy exists */ }
+
+        try {
+          await client.query(`SELECT add_continuous_aggregate_policy('${ht.prefix}_samples_1hr',
+            start_offset => INTERVAL '4 hours', end_offset => INTERVAL '1 hour',
+            schedule_interval => INTERVAL '30 minutes', if_not_exists => TRUE)`);
+        } catch (e) { /* policy exists */ }
+
+        try {
+          await client.query(`SELECT add_continuous_aggregate_policy('${ht.prefix}_samples_1day',
+            start_offset => INTERVAL '3 days', end_offset => INTERVAL '1 hour',
+            schedule_interval => INTERVAL '1 hour', if_not_exists => TRUE)`);
+        } catch (e) { /* policy exists */ }
+
+        // Retention: raw data 7 days, 1-min 30 days (1-hr and 1-day kept forever)
+        try {
+          await client.query(`SELECT add_retention_policy('${ht.table}',
+            drop_after => INTERVAL '7 days', if_not_exists => TRUE)`);
+        } catch (e) { /* policy exists */ }
+        try {
+          await client.query(`SELECT add_retention_policy('${ht.prefix}_samples_1min',
+            drop_after => INTERVAL '30 days', if_not_exists => TRUE)`);
+        } catch (e) { /* policy exists */ }
+
+        // Compression: compress raw chunks older than 2 days
+        try {
+          await client.query(`ALTER TABLE ${ht.table} SET (
+            timescaledb.compress,
+            timescaledb.compress_segmentby = '${ht.segmentby}',
+            timescaledb.compress_orderby = 'time DESC'
+          )`);
+          await client.query(`SELECT add_compression_policy('${ht.table}',
+            compress_after => INTERVAL '2 days', if_not_exists => TRUE)`);
+        } catch (e) { /* policy exists */ }
+
+      } catch (err) {
+        console.error(`TimescaleDB setup error for ${ht.table} (non-fatal):`, err.message);
+      }
+    }
+    console.log('✅ All per-provider hypertables + continuous aggregates + policies ready');
+  } else {
+    // Fallback: create indexes for plain PostgreSQL
+    for (const ht of hypertables) {
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_${ht.prefix}_samples_user_time
+        ON ${ht.table}(user_id, metric_type, time DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_${ht.prefix}_samples_time
+        ON ${ht.table}(time DESC)`);
+    }
+    console.log('✅ Per-provider sample tables ready (plain PostgreSQL mode)');
+  }
+
+  // Indexes for regular event tables
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_ah_workouts_user ON apple_health_workouts(user_id, start_time DESC)`);
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_ah_sleep_user ON apple_health_sleep(user_id, start_time DESC)`);
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_hc_workouts_user ON health_connect_workouts(user_id, start_time DESC)`);
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_hc_sleep_user ON health_connect_sleep(user_id, start_time DESC)`);
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_fb_daily_user ON fitbit_daily(user_id, date DESC)`);
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_fb_workouts_user ON fitbit_workouts(user_id, start_time DESC)`);
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_fb_sleep_user ON fitbit_sleep(user_id, date DESC)`);
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_fb_weight_user ON fitbit_weight(user_id, date DESC)`);
 }
 
 // Seed default user

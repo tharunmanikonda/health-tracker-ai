@@ -1,29 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { AlertTriangle, ChevronDown, ChevronLeft, ChevronUp, Dumbbell, UtensilsCrossed } from 'lucide-react'
+import { ChevronLeft, ChevronDown, ChevronUp, Dumbbell, UtensilsCrossed, AlertTriangle, Users, Watch, AlertCircle } from 'lucide-react'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-
-const pct = (value, fallback = null) => {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) return fallback
-  return Math.round(parsed)
-}
-
-const getWorkoutStatus = (day) => {
-  if (!day.dayWorkoutTotal) return 'na'
-  if ((day.workoutPct || 0) >= 100) return 'complete'
-  if ((day.workoutsCompleted || 0) > 0 || (day.workoutPct || 0) > 0) return 'partial'
-  return 'missed'
-}
-
-const getNutritionStatus = (day) => {
-  if (!day.dayCalorieTarget) return 'na'
-  if ((day.foodPct || 0) >= 80) return 'complete'
-  if ((day.caloriesLogged || 0) > 0 || (day.foodPct || 0) > 0) return 'partial'
-  return 'missed'
-}
 
 function TrainerDashboard() {
   const { teamId, planId } = useParams()
@@ -31,19 +11,6 @@ function TrainerDashboard() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [expandedMember, setExpandedMember] = useState(null)
-
-  const sortedMembers = useMemo(() => {
-    const members = [...(data?.members || [])]
-    members.sort((a, b) => {
-      if (!!a.needs_attention !== !!b.needs_attention) {
-        return a.needs_attention ? -1 : 1
-      }
-      const aCompliance = Number.isFinite(Number(a.overall_compliance)) ? Number(a.overall_compliance) : 101
-      const bCompliance = Number.isFinite(Number(b.overall_compliance)) ? Number(b.overall_compliance) : 101
-      return aCompliance - bCompliance
-    })
-    return members
-  }, [data?.members])
 
   useEffect(() => {
     fetchDashboard()
@@ -60,6 +27,31 @@ function TrainerDashboard() {
     }
   }
 
+  const getWorkoutStatus = (day) => {
+    if (day.dayWorkoutTotal === 0) return 'empty'
+    if (day.workoutPct === 100) return 'complete'
+    if (day.workoutsCompleted > 0) return 'partial'
+    return 'empty'
+  }
+
+  const getNutritionStatus = (day) => {
+    if (day.dayCalorieTarget === 0) return 'empty'
+    if (day.foodPct >= 80) return 'complete'
+    if (day.caloriesLogged > 0) return 'partial'
+    return 'empty'
+  }
+
+  const sortedMembers = useMemo(() => {
+    if (!data?.members) return []
+    return [...data.members].sort((a, b) => {
+      if (a.needs_attention && !b.needs_attention) return -1
+      if (!a.needs_attention && b.needs_attention) return 1
+      const aComp = a.overall_compliance ?? 100
+      const bComp = b.overall_compliance ?? 100
+      return aComp - bComp
+    })
+  }, [data?.members])
+
   if (loading) {
     return (
       <div className="loading-container">
@@ -75,8 +67,7 @@ function TrainerDashboard() {
     ? `${new Date(data.week_dates[0]).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${new Date(data.week_dates[6]).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
     : ''
 
-  const summary = data.summary || {}
-  const membersCount = summary.total_members ?? sortedMembers.length
+  const summary = data.summary
 
   return (
     <div className="td-root">
@@ -91,24 +82,27 @@ function TrainerDashboard() {
         </div>
       </div>
 
-      <div className="td-stats-row">
-        <div className="td-stat-pill">
-          <span className="td-stat-label">Members</span>
-          <span className="td-stat-value">{membersCount}</span>
+      {/* Team Stats Row */}
+      {summary && (
+        <div className="td-stats-row">
+          <div className="td-stat-pill">
+            <span className="td-stat-value">{summary.total_members}</span>
+            <span className="td-stat-label"><Users size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> Members</span>
+          </div>
+          <div className="td-stat-pill">
+            <span className="td-stat-value">{summary.avg_overall_compliance}%</span>
+            <span className="td-stat-label">Overall</span>
+          </div>
+          <div className="td-stat-pill">
+            <span className="td-stat-value">{summary.avg_workout_completion}%</span>
+            <span className="td-stat-label"><Dumbbell size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> Workout</span>
+          </div>
+          <div className="td-stat-pill">
+            <span className="td-stat-value">{summary.avg_nutrition_compliance}%</span>
+            <span className="td-stat-label"><UtensilsCrossed size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> Nutrition</span>
+          </div>
         </div>
-        <div className="td-stat-pill">
-          <span className="td-stat-label">Overall</span>
-          <span className="td-stat-value">{pct(summary.avg_overall_compliance, 0)}%</span>
-        </div>
-        <div className="td-stat-pill">
-          <span className="td-stat-label">Workout</span>
-          <span className="td-stat-value">{pct(summary.avg_workout_completion, 0)}%</span>
-        </div>
-        <div className="td-stat-pill">
-          <span className="td-stat-label">Nutrition</span>
-          <span className="td-stat-value">{pct(summary.avg_nutrition_compliance, 0)}%</span>
-        </div>
-      </div>
+      )}
 
       {/* Legend */}
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', fontSize: '0.7rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
@@ -127,7 +121,7 @@ function TrainerDashboard() {
       </div>
 
       {/* Members */}
-      {data.members?.length === 0 && (
+      {sortedMembers.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
           No members assigned to this plan
         </div>
@@ -143,36 +137,37 @@ function TrainerDashboard() {
                 onClick={() => setExpandedMember(isExpanded ? null : member.user_id)}
                 style={{ cursor: 'pointer' }}
               >
-                <div className="td-member-header">
-                  <div className="td-member-title-wrap">
-                    <span className="td-member-name">{member.name}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{member.name}</span>
                     {member.needs_attention && (
-                      <span className="td-attention-pill">
-                        <AlertTriangle size={12} />
-                        Attention
+                      <span className="td-attention-badge">
+                        <AlertTriangle size={10} /> Attention
                       </span>
                     )}
                   </div>
-                  <div className="td-member-metrics">
-                    <span className="td-member-metric">{pct(member.overall_compliance, 0)}% overall</span>
-                    <span className="td-member-metric">{member.missed_days || 0} missed</span>
-                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                  </div>
+                  {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </div>
 
-                {/* Week Grid */}
+                {/* Week Grid - Split cells */}
                 <div className="trainer-week-grid">
                   {member.days.map((day, i) => {
-                    const workoutStatus = getWorkoutStatus(day)
-                    const nutritionStatus = getNutritionStatus(day)
+                    const wStatus = getWorkoutStatus(day)
+                    const nStatus = getNutritionStatus(day)
                     return (
                       <div key={i} className="trainer-day-cell-wrapper">
                         <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '0.25rem' }}>
                           {DAY_LABELS[i]}
                         </div>
-                        <div className="td-split-cell">
-                          <div className={`td-split-half td-workout-${workoutStatus}`} />
-                          <div className={`td-split-half td-nutrition-${nutritionStatus}`} />
+                        <div className="td-day-cell-split" style={{ position: 'relative' }}>
+                          <div className={`td-day-half-top ${wStatus}`} />
+                          <div className={`td-day-half-bottom ${nStatus}`} />
+                          {day.verifiedCount > 0 && (
+                            <span className="td-cell-verified-indicator"><Watch size={8} /></span>
+                          )}
+                          {day.verifiedCount === 0 && day.conflictingCount > 0 && (
+                            <span className="td-cell-conflicting-indicator"><AlertCircle size={8} /></span>
+                          )}
                         </div>
                       </div>
                     )
@@ -187,71 +182,128 @@ function TrainerDashboard() {
                   <span className="td-summary-chip">
                     <UtensilsCrossed size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> {member.avg_food_compliance}% avg
                   </span>
+                  {member.overall_compliance !== null && (
+                    <span style={{ marginLeft: 'auto', fontWeight: 500 }}>
+                      {member.overall_compliance}% overall
+                    </span>
+                  )}
                 </div>
               </div>
 
               {/* Expanded Detail */}
               {isExpanded && (
                 <div style={{ marginTop: '0.75rem', borderTop: '1px solid var(--glass-border)', paddingTop: '0.75rem' }}>
-                  {member.days.map((day, i) => {
-                    const workoutStatus = getWorkoutStatus(day)
-                    const nutritionStatus = getNutritionStatus(day)
-                    return (
-                      <div key={i} className="td-day-detail-row">
-                        <span className="td-day-label">{DAY_LABELS[i]}</span>
-                        <div className="td-day-detail-main">
-                          {day.dayWorkoutTotal > 0 ? (
-                            <span className={`td-text-${workoutStatus}`}>{day.workoutsCompleted}/{day.dayWorkoutTotal} exercises</span>
-                          ) : (
-                            <span className="td-text-muted">Rest</span>
-                          )}
-                        </div>
-                        <div className="td-day-detail-nutrition">
-                          {day.dayCalorieTarget > 0 ? (
-                            <>
-                              <span className={`td-text-${nutritionStatus}`}>{day.caloriesLogged}/{day.dayCalorieTarget} cal</span>
-                              <div className="td-macro-chip-row">
-                                <span className="td-macro-chip">P {Math.round(day.proteinLogged || 0)}g</span>
-                                <span className="td-macro-chip">C {Math.round(day.carbsLogged || 0)}g</span>
-                                <span className="td-macro-chip">F {Math.round(day.fatLogged || 0)}g</span>
-                              </div>
-                            </>
-                          ) : (
-                            <span className="td-text-muted">—</span>
-                          )}
-                        </div>
+                  {member.days.map((day, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.375rem 0', fontSize: '0.8rem' }}>
+                      <span style={{ width: '30px', fontWeight: 500 }}>{DAY_LABELS[i]}</span>
+                      <div style={{ flex: 1 }}>
+                        {day.dayWorkoutTotal > 0 ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <span style={{ color: day.workoutPct === 100 ? 'var(--success)' : day.workoutPct > 0 ? 'var(--warning)' : 'var(--text-muted)' }}>
+                              {day.workoutsCompleted}/{day.dayWorkoutTotal} exercises
+                            </span>
+                            {day.verifiedCount > 0 && (
+                              <span className="td-verified-badge">
+                                <Watch size={10} /> Verified
+                              </span>
+                            )}
+                            {day.verifiedCount === 0 && day.conflictingCount > 0 && (
+                              <span className="td-conflicting-badge">
+                                <AlertCircle size={10} /> Type mismatch
+                              </span>
+                            )}
+                            {day.verifiedCount === 0 && day.conflictingCount === 0 && day.noWearableCount > 0 && (
+                              <span className="td-wearable-detail">No wearable data</span>
+                            )}
+                            {day.wearableDetail && (
+                              <span className="td-wearable-detail">
+                                {day.wearableDetail.workoutType && `${day.wearableDetail.workoutType}`}
+                                {day.wearableDetail.duration && ` ${day.wearableDetail.duration}min`}
+                                {day.wearableDetail.calories && ` ${Math.round(day.wearableDetail.calories)}cal`}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)' }}>Rest</span>
+                        )}
                       </div>
-                    )
-                  })}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        {day.dayCalorieTarget > 0 ? (
+                          <>
+                            <span style={{ color: day.foodPct >= 80 ? 'var(--success)' : day.foodPct > 0 ? 'var(--warning)' : 'var(--text-muted)', fontSize: '0.75rem' }}>
+                              {day.caloriesLogged}/{day.dayCalorieTarget} cal
+                            </span>
+                            {(day.proteinTarget > 0 || day.carbsTarget > 0 || day.fatTarget > 0) && (
+                              <div className="td-day-macros">
+                                {day.proteinTarget > 0 && <span className="td-macro-chip protein">P {Math.round(day.proteinLogged)}g</span>}
+                                {day.carbsTarget > 0 && <span className="td-macro-chip carbs">C {Math.round(day.carbsLogged)}g</span>}
+                                {day.fatTarget > 0 && <span className="td-macro-chip fat">F {Math.round(day.fatLogged)}g</span>}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>--</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
 
-                  <div className="td-weekly-nutrition">
-                    <h4 className="td-weekly-title">Weekly Nutrition Summary</h4>
-                    {[
-                      ['Protein', nutrition.protein],
-                      ['Carbs', nutrition.carbs],
-                      ['Fat', nutrition.fat]
-                    ].map(([label, row]) => {
-                      const macro = row || {}
-                      const macroPct = Math.max(0, Math.min(100, pct(macro.pct, 0)))
-                      return (
-                        <div key={label} className="td-macro-row">
-                          <div className="td-macro-row-top">
-                            <span>{label}</span>
-                            <span>{Math.round(macro.logged || 0)}g / {Math.round(macro.target || 0)}g</span>
-                          </div>
-                          <div className="td-progress-track">
-                            <div className="td-progress-fill" style={{ width: `${macroPct}%` }} />
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
+                  {/* Weekly Nutrition Summary */}
+                  {member.weekly_nutrition && (member.weekly_nutrition.target_protein > 0 || member.weekly_nutrition.target_carbs > 0 || member.weekly_nutrition.target_fat > 0) && (
+                    <div className="td-nutrition-summary">
+                      <div style={{ fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
+                        Weekly Nutrition Avg
+                      </div>
+                      {member.weekly_nutrition.target_protein > 0 && (
+                        <MacroBar
+                          label="Protein"
+                          actual={member.weekly_nutrition.avg_protein}
+                          target={member.weekly_nutrition.target_protein}
+                          colorClass="protein"
+                        />
+                      )}
+                      {member.weekly_nutrition.target_carbs > 0 && (
+                        <MacroBar
+                          label="Carbs"
+                          actual={member.weekly_nutrition.avg_carbs}
+                          target={member.weekly_nutrition.target_carbs}
+                          colorClass="carbs"
+                        />
+                      )}
+                      {member.weekly_nutrition.target_fat > 0 && (
+                        <MacroBar
+                          label="Fat"
+                          actual={member.weekly_nutrition.avg_fat}
+                          target={member.weekly_nutrition.target_fat}
+                          colorClass="fat"
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           )
         })}
       </div>
+    </div>
+  )
+}
+
+function MacroBar({ label, actual, target, colorClass }) {
+  const pct = target > 0 ? Math.min(Math.round((actual / target) * 100), 150) : 0
+  const displayPct = Math.min(pct, 100)
+
+  return (
+    <div className="td-macro-row">
+      <span className="td-macro-label">{label}</span>
+      <div className="td-macro-bar">
+        <div
+          className={`td-macro-fill ${colorClass}`}
+          style={{ width: `${displayPct}%` }}
+        />
+      </div>
+      <span className="td-macro-value">{actual}g / {target}g ({pct}%)</span>
     </div>
   )
 }

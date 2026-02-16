@@ -29,32 +29,13 @@ router.get('/:planId/dashboard', requireTeamLeader, async (req, res) => {
     }
 
     const [workoutCounts, mealTotals, allProgress] = await Promise.all([
+      db.all(`SELECT day_of_week, COUNT(*) as count FROM plan_workouts WHERE plan_id = $1 GROUP BY day_of_week`, [planId]),
+      db.all(`SELECT day_of_week, COALESCE(SUM(calories), 0) as total_calories, COALESCE(SUM(protein), 0) as total_protein, COALESCE(SUM(carbs), 0) as total_carbs, COALESCE(SUM(fat), 0) as total_fat FROM plan_meals WHERE plan_id = $1 GROUP BY day_of_week`, [planId]),
       db.all(
-        `SELECT day_of_week, COUNT(*)::int as count
-         FROM plan_workouts
-         WHERE plan_id = $1
-         GROUP BY day_of_week`,
-        [planId]
-      ),
-      db.all(
-        `SELECT day_of_week,
-                COALESCE(SUM(calories), 0)::real as total_calories,
-                COALESCE(SUM(protein), 0)::real as total_protein,
-                COALESCE(SUM(carbs), 0)::real as total_carbs,
-                COALESCE(SUM(fat), 0)::real as total_fat
-         FROM plan_meals
-         WHERE plan_id = $1
-         GROUP BY day_of_week`,
-        [planId]
-      ),
-      db.all(
-        `SELECT pp.*,
-                pw.day_of_week as workout_day,
-                pm.day_of_week as meal_day,
-                pm.calories as planned_calories,
-                pm.protein as planned_protein,
-                pm.carbs as planned_carbs,
-                pm.fat as planned_fat
+        `SELECT pp.*, pp.verification_status, pp.verification_source, pp.wearable_metric_id,
+                pw.day_of_week as workout_day, pm.day_of_week as meal_day,
+                pm.calories as planned_calories, pm.protein as planned_protein,
+                pm.carbs as planned_carbs, pm.fat as planned_fat
          FROM plan_progress pp
          LEFT JOIN plan_workouts pw ON pp.workout_item_id = pw.id
          LEFT JOIN plan_meals pm ON pp.meal_item_id = pm.id
@@ -68,21 +49,23 @@ router.get('/:planId/dashboard', requireTeamLeader, async (req, res) => {
       buildMemberStats(m, allProgress, weekDates, workoutCounts, mealTotals),
     );
 
+    // Team summary
+    const needsAttentionCount = dashboard.filter(m => m.needs_attention).length;
+    const allOverall = dashboard.map(m => m.overall_compliance).filter(v => v !== null);
+    const allWorkoutPcts = dashboard.map(m => {
+      return m.workout_days_total > 0 ? Math.round((m.workout_days_completed / m.workout_days_total) * 100) : null;
+    }).filter(v => v !== null);
+    const allFoodPcts = dashboard.map(m => m.avg_food_compliance).filter(v => v > 0 || v === 0);
+
     const summary = {
       total_members: dashboard.length,
-      needs_attention_count: dashboard.filter((m) => m.needs_attention).length,
-      avg_workout_completion: average(
-        dashboard.map((m) => m.avg_workout_completion).filter((v) => v !== null),
-      ),
-      avg_nutrition_compliance: average(
-        dashboard.map((m) => m.avg_nutrition_compliance).filter((v) => v !== null),
-      ),
-      avg_overall_compliance: average(
-        dashboard.map((m) => m.overall_compliance).filter((v) => v !== null),
-      ),
+      needs_attention_count: needsAttentionCount,
+      avg_workout_completion: allWorkoutPcts.length > 0 ? Math.round(allWorkoutPcts.reduce((a, b) => a + b, 0) / allWorkoutPcts.length) : 0,
+      avg_nutrition_compliance: allFoodPcts.length > 0 ? Math.round(allFoodPcts.reduce((a, b) => a + b, 0) / allFoodPcts.length) : 0,
+      avg_overall_compliance: allOverall.length > 0 ? Math.round(allOverall.reduce((a, b) => a + b, 0) / allOverall.length) : 0
     };
 
-    res.json({ plan, week_dates: weekDates, summary, members: dashboard });
+    res.json({ plan, week_dates: weekDates, members: dashboard, summary });
   } catch (err) {
     console.error('Dashboard error:', err);
     res.status(500).json({ error: 'Failed to fetch dashboard' });
@@ -136,14 +119,12 @@ function buildMemberStats(member, allProgress, weekDates, workoutCounts, mealTot
   const memberProgress = allProgress.filter(p => p.user_id === member.user_id);
 
   const days = weekDates.map((dateStr, dayIndex) => {
-    const workoutTarget = workoutCounts.find(w => Number(w.day_of_week) === dayIndex);
-    const mealTarget = mealTotals.find(m => Number(m.day_of_week) === dayIndex);
-
-    const dayWorkoutTotal = toNumber(workoutTarget?.count);
-    const dayCalorieTarget = toNumber(mealTarget?.total_calories);
-    const dayProteinTarget = toNumber(mealTarget?.total_protein);
-    const dayCarbsTarget = toNumber(mealTarget?.total_carbs);
-    const dayFatTarget = toNumber(mealTarget?.total_fat);
+    const dayWorkoutTotal = workoutCounts.find(w => w.day_of_week === dayIndex)?.count || 0;
+    const dayMealData = mealTotals.find(m => m.day_of_week === dayIndex);
+    const dayCalorieTarget = dayMealData?.total_calories || 0;
+    const dayProteinTarget = dayMealData?.total_protein || 0;
+    const dayCarbsTarget = dayMealData?.total_carbs || 0;
+    const dayFatTarget = dayMealData?.total_fat || 0;
 
     const dayProgress = memberProgress.filter(p => {
       const rawDate = p.date?.toISOString?.() || String(p.date || '');
@@ -151,31 +132,43 @@ function buildMemberStats(member, allProgress, weekDates, workoutCounts, mealTot
       return pDate === dateStr;
     });
 
-    const workoutsCompleted = dayProgress.filter((p) => p.workout_item_id && p.workout_completed).length;
-    const mealProgress = dayProgress.filter((p) => p.meal_item_id);
-    const caloriesLogged = mealProgress.reduce((sum, p) => sum + toNumber(p.actual_calories), 0);
-    const proteinLogged = mealProgress.reduce((sum, p) => sum + toNumber(p.actual_protein), 0);
-    const carbsLogged = mealProgress.reduce((sum, p) => sum + toNumber(p.actual_carbs), 0);
-    const fatLogged = mealProgress.reduce((sum, p) => sum + toNumber(p.actual_fat), 0);
+    const workoutProgress = dayProgress.filter(p => p.workout_item_id);
+    const workoutsCompleted = workoutProgress.filter(p => p.workout_completed).length;
+    const mealEntries = dayProgress.filter(p => p.meal_item_id);
+    const caloriesLogged = mealEntries.reduce((sum, p) => sum + (p.actual_calories || 0), 0);
+    const proteinLogged = mealEntries.reduce((sum, p) => sum + (p.actual_protein || 0), 0);
+    const carbsLogged = mealEntries.reduce((sum, p) => sum + (p.actual_carbs || 0), 0);
+    const fatLogged = mealEntries.reduce((sum, p) => sum + (p.actual_fat || 0), 0);
+
+    // Verification counts
+    const verifiedCount = workoutProgress.filter(p => p.verification_status === 'verified').length;
+    const conflictingCount = workoutProgress.filter(p => p.verification_status === 'conflicting').length;
+    const noWearableCount = workoutProgress.filter(p => p.verification_status === 'no_data').length;
+    const unverifiedCount = workoutProgress.filter(p => !p.verification_status || p.verification_status === 'unverified').length;
+
+    // Wearable workout detail placeholder (loaded async via wearable-activity endpoint)
+    const verifiedRow = workoutProgress.find(p => p.wearable_metric_id && p.verification_source);
+    let wearableDetail = null;
+    if (verifiedRow) {
+      wearableDetail = {
+        source: verifiedRow.verification_source,
+        wearable_metric_id: verifiedRow.wearable_metric_id,
+      };
+    }
 
     return {
-      date: dateStr,
-      day_of_week: dayIndex,
-      workoutPct: toPct(workoutsCompleted, dayWorkoutTotal),
-      foodPct: toPct(caloriesLogged, dayCalorieTarget),
-      proteinPct: toPct(proteinLogged, dayProteinTarget),
-      carbsPct: toPct(carbsLogged, dayCarbsTarget),
-      fatPct: toPct(fatLogged, dayFatTarget),
-      workoutsCompleted,
-      dayWorkoutTotal,
-      caloriesLogged,
-      dayCalorieTarget,
-      proteinLogged,
-      dayProteinTarget,
-      carbsLogged,
-      dayCarbsTarget,
-      fatLogged,
-      dayFatTarget,
+      date: dateStr, day_of_week: dayIndex,
+      workoutPct: dayWorkoutTotal > 0 ? Math.round((workoutsCompleted / dayWorkoutTotal) * 100) : null,
+      foodPct: dayCalorieTarget > 0 ? Math.round((caloriesLogged / dayCalorieTarget) * 100) : null,
+      workoutsCompleted, dayWorkoutTotal, caloriesLogged, dayCalorieTarget,
+      proteinLogged, proteinTarget: dayProteinTarget,
+      proteinPct: dayProteinTarget > 0 ? Math.round((proteinLogged / dayProteinTarget) * 100) : null,
+      carbsLogged, carbsTarget: dayCarbsTarget,
+      carbsPct: dayCarbsTarget > 0 ? Math.round((carbsLogged / dayCarbsTarget) * 100) : null,
+      fatLogged, fatTarget: dayFatTarget,
+      fatPct: dayFatTarget > 0 ? Math.round((fatLogged / dayFatTarget) * 100) : null,
+      verifiedCount, conflictingCount, noWearableCount, unverifiedCount,
+      wearableDetail
     };
   });
 
@@ -198,35 +191,56 @@ function buildMemberStats(member, allProgress, weekDates, workoutCounts, mealTot
     return hadTarget && hadNoLogs;
   }).length;
 
+  // Weekly nutrition summary
+  const daysWithMeals = days.filter(d => d.dayCalorieTarget > 0);
+  const totalProteinLogged = days.reduce((s, d) => s + d.proteinLogged, 0);
+  const totalProteinTarget = days.reduce((s, d) => s + d.proteinTarget, 0);
+  const totalCarbsLogged = days.reduce((s, d) => s + d.carbsLogged, 0);
+  const totalCarbsTarget = days.reduce((s, d) => s + d.carbsTarget, 0);
+  const totalFatLogged = days.reduce((s, d) => s + d.fatLogged, 0);
+  const totalFatTarget = days.reduce((s, d) => s + d.fatTarget, 0);
+
+  const weekly_nutrition = {
+    avg_protein: daysWithMeals.length > 0 ? Math.round(totalProteinLogged / daysWithMeals.length) : 0,
+    target_protein: daysWithMeals.length > 0 ? Math.round(totalProteinTarget / daysWithMeals.length) : 0,
+    avg_carbs: daysWithMeals.length > 0 ? Math.round(totalCarbsLogged / daysWithMeals.length) : 0,
+    target_carbs: daysWithMeals.length > 0 ? Math.round(totalCarbsTarget / daysWithMeals.length) : 0,
+    avg_fat: daysWithMeals.length > 0 ? Math.round(totalFatLogged / daysWithMeals.length) : 0,
+    target_fat: daysWithMeals.length > 0 ? Math.round(totalFatTarget / daysWithMeals.length) : 0
+  };
+
+  // Overall compliance & needs_attention
+  const allPcts = [];
+  days.forEach(d => {
+    if (d.workoutPct !== null) allPcts.push(d.workoutPct);
+    if (d.foodPct !== null) allPcts.push(d.foodPct);
+  });
+  const overall_compliance = allPcts.length > 0 ? Math.round(allPcts.reduce((a, b) => a + b, 0) / allPcts.length) : null;
+
+  const missed_days = days.filter(d => {
+    const hasTargets = d.dayWorkoutTotal > 0 || d.dayCalorieTarget > 0;
+    const nothingLogged = d.workoutsCompleted === 0 && d.caloriesLogged === 0;
+    return hasTargets && nothingLogged;
+  }).length;
+
+  const needs_attention = missed_days >= 2 || (overall_compliance !== null && overall_compliance < 50);
+
+  const avg_food_compliance = foodPcts.length > 0 ? Math.round(foodPcts.reduce((a, b) => a + b, 0) / foodPcts.length) : 0;
+
+  const has_wearable = days.some(d => d.verifiedCount > 0 || d.conflictingCount > 0);
+
   return {
     user_id: member.user_id,
     name: member.name,
     days,
     workout_days_completed: daysWithWorkouts.filter(d => d.workoutPct === 100).length,
     workout_days_total: daysWithWorkouts.length,
-    avg_workout_completion: average(workoutPcts),
-    avg_nutrition_compliance: average(foodPcts),
-    avg_food_compliance: average(foodPcts) || 0,
-    overall_compliance: overallCompliance,
-    missed_days: missedDays,
-    needs_attention: missedDays >= 2 || (overallCompliance !== null && overallCompliance < 50),
-    weekly_nutrition: {
-      protein: {
-        logged: Math.round(proteinLoggedTotal),
-        target: Math.round(proteinTargetTotal),
-        pct: toPct(proteinLoggedTotal, proteinTargetTotal),
-      },
-      carbs: {
-        logged: Math.round(carbsLoggedTotal),
-        target: Math.round(carbsTargetTotal),
-        pct: toPct(carbsLoggedTotal, carbsTargetTotal),
-      },
-      fat: {
-        logged: Math.round(fatLoggedTotal),
-        target: Math.round(fatTargetTotal),
-        pct: toPct(fatLoggedTotal, fatTargetTotal),
-      },
-    },
+    avg_food_compliance,
+    weekly_nutrition,
+    overall_compliance,
+    missed_days,
+    needs_attention,
+    has_wearable
   };
 }
 
